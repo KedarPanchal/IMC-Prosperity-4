@@ -30,7 +30,7 @@ You can also install it with pip:
 pip install uv
 ```
 
-After installing `uv`, you can install the required dependencies for the visualization tool:
+After installing `uv`, you can install the required dependencies for the backtesting script:
 
 ```bash
 uv sync
