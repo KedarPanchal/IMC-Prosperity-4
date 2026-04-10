@@ -42,7 +42,7 @@ class TradeData:
 
 
 # TODO: Add functionality to display the trades as an iterative animation
-def analyze_trade_data(data: pd.DataFrame, animated: bool = False):
+def analyze_trade_data(data: pd.DataFrame, filename: str, animated: bool = False):
     # Dictionary mapping trade items to priority queue by timestamp
     trades = defaultdict(list[TradeData])
     for _, row in data.iterrows():
@@ -62,6 +62,7 @@ def analyze_trade_data(data: pd.DataFrame, animated: bool = False):
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
     fig, axes = plt.subplots(3, len(trades.items()), figsize=(12, 6))
+    fig.suptitle(f"Trade Data Analysis for {filename}")
     for ax in axes[2]:
         ax.remove()
     ax_master = fig.add_subplot(3, 1, 3)
@@ -123,7 +124,7 @@ class PriceData:
         return self.timestamp < other.timestamp
 
 
-def analyze_price_data(data: pd.DataFrame, animated: bool = False):
+def analyze_price_data(data: pd.DataFrame, filename: str, animated: bool = False):
     # Dictionary mapping trade items to priority queue by timestamp
     prices = defaultdict(list[PriceData])
     for _, row in data.iterrows():
@@ -145,6 +146,7 @@ def analyze_price_data(data: pd.DataFrame, animated: bool = False):
     # The first two rows show bid/ask and quantity data for each price item
     # The third row contain a master subplot of all the price items
     fig, axes = plt.subplots(3, len(prices.items()), figsize=(12, 6))
+    fig.suptitle(f"Price Data Analysis for {filename}")
     for ax in axes[2]:
         ax.remove()
     ax_master = fig.add_subplot(3, 1, 3)
@@ -168,7 +170,7 @@ def analyze_price_data(data: pd.DataFrame, animated: bool = False):
         axes[0, plot].set_ylabel("Bid/Ask Price", color="green")
         bid_prices = [price.bid_price for price in price_queue]
         ask_prices = [price.ask_price for price in price_queue]
-        axes[0, plot].vlines(timestamps, bid_prices, ask_prices, linewidth=0.8, label="Bid/Ask", color="green")
+        axes[0, plot].vlines(timestamps, bid_prices, ask_prices, linewidth=0.8, label="Bid/Ask Price", color="green")
         axes[0, plot].tick_params(axis="y", labelcolor="green")
 
         # Plot the quantity data
@@ -194,9 +196,9 @@ def analyze_data(file_path: str, animated: bool = False):
 
     # Analyze the data according to type
     if "buyer" in data.columns:
-        analyze_trade_data(data, animated)
+        analyze_trade_data(data, os.path.basename(file_path), animated)
     elif "profit_and_loss" in data.columns:
-        analyze_price_data(data, animated)
+        analyze_price_data(data, os.path.basename(file_path), animated)
     else:
         print("Unknown data being analyzed")
 
