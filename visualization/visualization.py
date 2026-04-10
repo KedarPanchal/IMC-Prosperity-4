@@ -34,7 +34,7 @@ class TradeData:
             price: float
             ):
         self.timestamp = timestamp
-        self.symbol= symbol
+        self.symbol = symbol
         self.quantity = quantity
         self.price = price
 
@@ -155,7 +155,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     ax_master.yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
     ax_master.set_title("All Price Items")
 
-    # Render each indivudal price item in a subplot
+    # Render each individual price item in a subplot
     for plot, (symbol, price_list) in enumerate(prices.items()):
         # Set shared axis data
         axes[0, plot].set_title(symbol)
