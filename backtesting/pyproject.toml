@@ -1,7 +1,7 @@
 [project]
 name = "backtesting"
 version = "0.1.0"
-description = "Add your description here"
+description = "Runs backtests on IMC Prosperity 4 trading data"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
