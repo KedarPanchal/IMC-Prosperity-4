@@ -29,11 +29,17 @@ name = "backtesting"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "prosperity3bt" },
+    { name = "prosperity4btest" },
     { name = "prosperity4btx" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "prosperity4btx", specifier = ">=0.0.2" }]
+requires-dist = [
+    { name = "prosperity3bt", specifier = ">=0.12.0" },
+    { name = "prosperity4btest", specifier = ">=0.4.2" },
+    { name = "prosperity4btx", specifier = ">=0.0.2" },
+]
 
 [[package]]
 name = "click"
@@ -288,6 +294,40 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a1/96/06e01a7b38dce6fe1db213e061a4602dd6032a8a97ef6c1a862537732421/prompt_toolkit-3.0.52.tar.gz", hash = "sha256:28cde192929c8e7321de85de1ddbe736f1375148b02f2e17edd840042b1be855", size = 434198, upload-time = "2025-08-27T15:24:02.057Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl", hash = "sha256:9aac639a3bbd33284347de5ad8d68ecc044b91a762dc39b7c21095fcd6a19955", size = 391431, upload-time = "2025-08-27T15:23:59.498Z" },
+]
+
+[[package]]
+name = "prosperity3bt"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipython", version = "9.10.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "ipython", version = "9.12.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "jsonpickle" },
+    { name = "orjson" },
+    { name = "tqdm" },
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bc/bc/f615d515d6f4ab26e8c60c23de424fa3b284db57fcaaa5d99ebdcbbde55f/prosperity3bt-0.12.0.tar.gz", hash = "sha256:f94dc98fc119518bb0cb3c1b9155bf7c6ea9160063fa24733fd3d4077c783f52", size = 32269510, upload-time = "2025-04-25T00:32:30.934Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/32/1fc4bbdc658892c241adc6f779977573ff47f7dcd51da2d2032c689d85dd/prosperity3bt-0.12.0-py3-none-any.whl", hash = "sha256:7252ede266735b57a50960b3422f005182ff085af2b591bbfdc467333a1e3fa4", size = 33830607, upload-time = "2025-04-25T00:32:27.332Z" },
+]
+
+[[package]]
+name = "prosperity4btest"
+version = "0.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipython", version = "9.10.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "ipython", version = "9.12.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "jsonpickle" },
+    { name = "orjson" },
+    { name = "tqdm" },
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4b/98/412cdaf46d73cff104514b94b25807027398b2f672ca37a448c5e43e60cc/prosperity4btest-0.4.2.tar.gz", hash = "sha256:67606f2d2388c4f2cb04f51fafaec11949898f721e658b8ff0e3d31907e09eb9", size = 328383, upload-time = "2026-03-26T16:16:29.246Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/15/fe6099d4b964bd7396b2de9eb7d0e14b67b5f8ff491071b95bf27b443ebf/prosperity4btest-0.4.2-py3-none-any.whl", hash = "sha256:c5d014edf2a159166eda06decc01021a9ce1e7afc9f7f380c9555b30a439a6b8", size = 372881, upload-time = "2026-03-26T16:16:27.857Z" },
 ]
 
 [[package]]
