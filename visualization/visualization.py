@@ -54,6 +54,11 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
             float(row["price"])  # type: ignore
         ))
 
+    # Check if any data was loaded
+    if not trades:
+        print("No trade data found for analysis")
+        return
+
     # Sort each trade item by timestamp
     for trade_list in trades.values():
         trade_list.sort()
@@ -136,6 +141,11 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             [row[f"ask_price_{i}"] for i in range(1, 4)],
             [row[f"ask_volume_{i}"] for i in range(1, 4)]
         ))
+
+    # Check if any data was loaded
+    if not prices:
+        print("No price data found for analysis")
+        return
 
     # Sort each price item by timestamp
     for price_list in prices.values():
