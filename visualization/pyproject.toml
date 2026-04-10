@@ -1,7 +1,7 @@
 [project]
 name = "visualization"
 version = "0.1.0"
-description = "Add your description here"
+description = "A visualization tool for IMC Prosperity 4 trading and price data"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
