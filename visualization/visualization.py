@@ -1,6 +1,5 @@
 import sys
 import os
-from heapq import heapify, heappop
 from collections import defaultdict
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -42,8 +41,8 @@ class TradeData:
 
 
 # TODO: Add functionality to display the trades as an iterative animation
-def analyze_trade_data(data: pd.DataFrame, filename: str, animated: bool = False):
-    # Dictionary mapping trade items to priority queue by timestamp
+def analyze_trade_data(data: pd.DataFrame, filename: str):
+    # Dictionary mapping trade items to their data by timestamp
     trades = defaultdict(list[TradeData])
     for _, row in data.iterrows():
         trades[row["symbol"]].append(TradeData(
@@ -52,11 +51,6 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, animated: bool = False
             int((row["quantity"])),  # type: ignore
             float(row["price"])  # type: ignore
         ))
-
-    # Convert the lists of trades into priority queues
-    # This is to display the trades as an iterative animation
-    for symbol in trades:
-        heapify(trades[symbol])
 
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
@@ -124,8 +118,8 @@ class PriceData:
         return self.timestamp < other.timestamp
 
 
-def analyze_price_data(data: pd.DataFrame, filename: str, animated: bool = False):
-    # Dictionary mapping trade items to priority queue by timestamp
+def analyze_price_data(data: pd.DataFrame, filename: str):
+    # Dictionary mapping trade items to their data by timestamp
     prices = defaultdict(list[PriceData])
     for _, row in data.iterrows():
         prices[row["product"]].append(PriceData(
@@ -136,11 +130,6 @@ def analyze_price_data(data: pd.DataFrame, filename: str, animated: bool = False
             [row[f"ask_price_{i}"] for i in range(1, 4)],
             [row[f"ask_volume_{i}"] for i in range(1, 4)]
         ))
-
-    # Convert the lists of prices into priority queues
-    # This is to display the prices as an iterative animation
-    for symbol in prices:
-        heapify(prices[symbol])
 
     # Create a subplot for each price item
     # The first two rows show bid/ask and quantity data for each price item
@@ -190,15 +179,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str, animated: bool = False
     plt.show()
 
 
-def analyze_data(file_path: str, animated: bool = False):
+def analyze_data(file_path: str):
     # Load the csv data
     data = pd.read_csv(file_path, sep=";")
 
     # Analyze the data according to type
     if "buyer" in data.columns:
-        analyze_trade_data(data, os.path.basename(file_path), animated)
+        analyze_trade_data(data, os.path.basename(file_path))
     elif "profit_and_loss" in data.columns:
-        analyze_price_data(data, os.path.basename(file_path), animated)
+        analyze_price_data(data, os.path.basename(file_path))
     else:
         print("Unknown data being analyzed")
 
@@ -207,12 +196,9 @@ def analyze_data(file_path: str, animated: bool = False):
 
 def main():
     files = []
-    animated = False
     for arg in sys.argv[1:]:
         if os.path.isfile(arg):
             files.append(arg)
-        elif arg == "--animated" or arg == "-a":
-            animated = True
         else:
             print(f"Unknown argument: {arg}")
             return
@@ -222,7 +208,7 @@ def main():
         return
 
     for file in files:
-        analyze_data(file, animated)
+        analyze_data(file)
 
 
 if __name__ == "__main__":
