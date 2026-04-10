@@ -14,6 +14,8 @@ def castable(value, to_type):
         return True
     except ValueError:
         return False
+    except TypeError:
+        return False
 
 
 def avg(values: list):
