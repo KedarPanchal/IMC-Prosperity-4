@@ -49,7 +49,7 @@ bash backtest.sh <backtester> <options>
 Where `<backtester>` is one of the following:
 
 * `zeeshan` - ZEESHAN's Prosperity 4 backtester
-* `nabayan` - Nabayan Saha's Prosperity 4 backtester
+* `nabayansaha` - Nabayan Saha's Prosperity 4 backtester
 * `jmerle` - Jmerle's Prosperity 3 backtester
 
 And `<options>` are the supported options for the selected backtester.
