@@ -1,4 +1,5 @@
 import sys
+import os
 from heapq import heapify, heappop
 from collections import defaultdict
 import pandas as pd
@@ -16,7 +17,8 @@ class TradeData:
         return self.timestamp < other.timestamp
 
 
-def analyze_trade_data(data: pd.DataFrame):
+# TODO: Add functionality to display the trades as an iterative animation
+def analyze_trade_data(data: pd.DataFrame, animated: bool = False):
     # Dictionary mapping trade items to priority queue by timestamp
     trades = defaultdict(list)
     for _, row in data.iterrows():
@@ -28,6 +30,7 @@ def analyze_trade_data(data: pd.DataFrame):
         ))
 
     # Convert the lists of trades into priority queues
+    # This is to display the trades as an iterative animation
     for symbol in trades:
         heapify(trades[symbol])
 
@@ -76,26 +79,41 @@ def analyze_trade_data(data: pd.DataFrame):
     plt.show()
 
 
-def analyze_price_data(data: pd.DataFrame):
+def analyze_price_data(data: pd.DataFrame, animated: bool = False):
     pass
 
 
-def analyze_data(file_path: str):
+def analyze_data(file_path: str, animated: bool = False):
     # Load the csv data
     data = pd.read_csv(file_path, sep=";")
 
     # Analyze the data according to type
     if "buyer" in data.columns:
-        analyze_trade_data(data)
+        analyze_trade_data(data, animated)
     elif "profit_and_loss" in data.columns:
-        analyze_price_data(data)
+        analyze_price_data(data, animated)
     else:
         print("Unknown data being analyzed")
 
 
 def main():
-    for file_path in sys.argv[1:]:
-        analyze_data(file_path)
+    files = []
+    animated = False
+    for arg in sys.argv[1:]:
+        if os.path.isfile(arg):
+            files.append(arg)
+        elif arg == "--animated" or arg == "-a":
+            animated = True
+        else:
+            print(f"Unknown argument: {arg}")
+            return
+
+    if not files:
+        print("No files provided for analysis")
+        return
+
+    for file in files:
+        analyze_data(file, animated)
 
 
 if __name__ == "__main__":
