@@ -27,12 +27,12 @@ class TradeData:
     def __init__(
             self,
             timestamp: int,
-            trade_type: str,
+            symbol: str,
             quantity: int,
             price: float
             ):
         self.timestamp = timestamp
-        self.trade_type = trade_type
+        self.symbol= symbol
         self.quantity = quantity
         self.price = price
 
