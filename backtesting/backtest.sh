@@ -6,8 +6,9 @@ cd "$(dirname "$0")"
 # Ensure all backtesters are installed and up to date
 uv sync
 
-# The first argument is which backtester to use
+# The first argument is which backtester to use, capture it and shift it out of the way
 backtester="$1"
+shift
 
 # Forward the rest of the arguments to the selected backtester
 if [[ "$backtester" == "zeeshan" ]]; then
@@ -27,7 +28,5 @@ else
     echo "Unknown backtester: $backtester"
     echo "Available options are: zeeshan, nabayansaha, jmerle"
     echo "Run '$0 --help' for more information."
+    exit 1
 fi
-
-# Return to the original directory
-cd "$OLDPWD"
