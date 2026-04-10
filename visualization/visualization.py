@@ -43,7 +43,7 @@ class TradeData:
 # TODO: Add functionality to display the trades as an iterative animation
 def analyze_trade_data(data: pd.DataFrame, filename: str):
     # Dictionary mapping trade items to their data by timestamp
-    trades = defaultdict(list[TradeData])
+    trades = defaultdict(list)
     for _, row in data.iterrows():
         trades[row["symbol"]].append(TradeData(
             int(row["timestamp"]),  # type: ignore
@@ -120,7 +120,7 @@ class PriceData:
 
 def analyze_price_data(data: pd.DataFrame, filename: str):
     # Dictionary mapping trade items to their data by timestamp
-    prices = defaultdict(list[PriceData])
+    prices = defaultdict(list)
     for _, row in data.iterrows():
         prices[row["product"]].append(PriceData(
             int(row["timestamp"]),  # type: ignore
