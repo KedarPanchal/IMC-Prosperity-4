@@ -1,0 +1,9 @@
+[project]
+name = "backtesting"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "prosperity4btx>=0.0.2",
+]
