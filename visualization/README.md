@@ -3,7 +3,6 @@
 The visualization tool is designed to visualize IMC Prosperity 4 trade and price data.
 It's a simple matplotlib-based visualizer that relies on the default interface for data exploration.
 
-
 ## Prerequisites
 
 Ensure you have `uv` installed to manage your Python environment.
