@@ -16,7 +16,7 @@ class TradeData:
         return self.timestamp < other.timestamp
 
 
-def analyze_trade_data(data: pd.DataFrame, interactive: bool = False):
+def analyze_trade_data(data: pd.DataFrame):
     # Dictionary mapping trade items to priority queue by timestamp
     trades = defaultdict(list)
     for _, row in data.iterrows():
