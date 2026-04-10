@@ -52,6 +52,10 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
             float(row["price"])  # type: ignore
         ))
 
+    # Sort each trade item by timestamp
+    for trade_list in trades.values():
+        trade_list.sort()
+
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
@@ -67,25 +71,25 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
     ax_master.set_title("All Trade Items")
 
     # Render each individual trade item in a subplot
-    for plot, (symbol, trade_queue) in enumerate(trades.items()):
+    for plot, (symbol, trade_list) in enumerate(trades.items()):
         # Set shared axis data
         axes[0, plot].set_title(symbol)
         axes[1, plot].set_xlabel("Timestamp")
-        timestamps = [trade.timestamp for trade in trade_queue]
+        timestamps = [trade.timestamp for trade in trade_list]
 
         # Plot the trade data
         axes[0, plot].tick_params(axis="y", labelcolor="green")
         axes[0, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
         axes[0, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
         axes[0, plot].set_ylabel("Price", color="green")
-        prices = [trade.price for trade in trade_queue]
+        prices = [trade.price for trade in trade_list]
         axes[0, plot].plot(timestamps, prices, linewidth=0.8, label="Price", color="green")
 
         # Plot the quantity data
         axes[1, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
         axes[1, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
         axes[1, plot].set_ylabel("Quantity", color="blue")
-        quantities = [trade.quantity for trade in trade_queue]
+        quantities = [trade.quantity for trade in trade_list]
         axes[1, plot].plot(timestamps, quantities, linewidth=0.8, label="Quantity", color="blue")
         axes[1, plot].tick_params(axis="y", labelcolor="blue")
 
@@ -131,6 +135,10 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             [row[f"ask_volume_{i}"] for i in range(1, 4)]
         ))
 
+    # Sort each price item by timestamp
+    for price_list in prices.values():
+        price_list.sort()
+
     # Create a subplot for each price item
     # The first two rows show bid/ask and quantity data for each price item
     # The third row contain a master subplot of all the price items
@@ -146,19 +154,19 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     ax_master.set_title("All Price Items")
 
     # Render each indivudal price item in a subplot
-    for plot, (symbol, price_queue) in enumerate(prices.items()):
+    for plot, (symbol, price_list) in enumerate(prices.items()):
         # Set shared axis data
         axes[0, plot].set_title(symbol)
         axes[1, plot].set_xlabel("Timestamp")
-        timestamps = [price.timestamp for price in price_queue]
+        timestamps = [price.timestamp for price in price_list]
 
         # Plot the bid/ask price data
         axes[0, plot].tick_params(axis="y", labelcolor="green")
         axes[0, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
         axes[0, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
         axes[0, plot].set_ylabel("Bid/Ask Price", color="green")
-        bid_prices = [price.bid_price for price in price_queue]
-        ask_prices = [price.ask_price for price in price_queue]
+        bid_prices = [price.bid_price for price in price_list]
+        ask_prices = [price.ask_price for price in price_list]
         axes[0, plot].vlines(timestamps, bid_prices, ask_prices, linewidth=0.8, label="Bid/Ask Price", color="green")
         axes[0, plot].tick_params(axis="y", labelcolor="green")
 
@@ -166,8 +174,8 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         axes[1, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
         axes[1, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
         axes[1, plot].set_ylabel("Bid/Ask Volume", color="blue")
-        bid_volumes = [price.bid_volume for price in price_queue]
-        ask_volumes = [price.ask_volume for price in price_queue]
+        bid_volumes = [price.bid_volume for price in price_list]
+        ask_volumes = [price.ask_volume for price in price_list]
         axes[1, plot].vlines(timestamps, bid_volumes, ask_volumes, linewidth=0.8, label="Bid/Ask Volume", color="blue")
         axes[1, plot].tick_params(axis="y", labelcolor="blue")
 
