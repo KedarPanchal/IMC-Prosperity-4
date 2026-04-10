@@ -1,5 +1,4 @@
 import sys
-import math
 from heapq import heapify, heappop
 from collections import defaultdict
 import pandas as pd
@@ -17,7 +16,7 @@ class TradeData:
         return self.timestamp < other.timestamp
 
 
-def analyze_trade_data(data: pd.DataFrame):
+def analyze_trade_data(data: pd.DataFrame, interactive: bool = False):
     # Dictionary mapping trade items to priority queue by timestamp
     trades = defaultdict(list)
     for _, row in data.iterrows():
@@ -32,22 +31,49 @@ def analyze_trade_data(data: pd.DataFrame):
     for symbol in trades:
         heapify(trades[symbol])
 
-    # The plot will contain a subplot for each trade item
-    # Compute rows and columns for the plot
-    # Round down for rows and round up for columns
-    rows = int(len(trades) ** 0.5)
-    cols = math.ceil(len(trades) / rows)
+    # Create a subplot for each trade item
+    # The first two rows show price and quantity data for each trade item
+    # The third row contain a master subplot of all the trade items
+    fig, axes = plt.subplots(3, len(trades.items()), figsize=(12, 6))
+    for ax in axes[2]:
+        ax.remove()
+    ax_master = fig.add_subplot(3, 1, 3)
 
-    fig, axes = plt.subplots(rows, cols, figsize=(9, 6), sharex=True)
-    for ax, (symbol, trade_queue) in zip(axes.flatten(), trades.items()):
-        # TODO: For now we just plot the price, but also plot the quantity
+    # Set plot data for the master plot
+    ax_master.xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
+    ax_master.yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
+    ax_master.set_title("All Trade Items")
+
+    # Render each individual trade item in a subplot
+    for plot, (symbol, trade_queue) in enumerate(trades.items()):
+        # Set shared twin axis data
+        axes[0, plot].set_title(symbol)
+        axes[1, plot].set_xlabel("Timestamp")
+        axes[0, plot].tick_params(axis="x", labelbottom=False)  # Emulate a shared x-axis 
         timestamps = [trade.timestamp for trade in trade_queue]
-        prices = [trade.price for trade in trade_queue]
-        ax.plot(timestamps, prices)
 
+        # Plot the price data on a logarithmic scale
+        axes[0, plot].tick_params(axis="y", labelcolor="green")
+        axes[0, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
+        axes[0, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
+        axes[0, plot].set_ylabel("Price", color="green")
+        prices = [trade.price for trade in trade_queue]
+        axes[0, plot].plot(timestamps, prices, linewidth=0.8, label="Price", color="green")
+
+        # Plot the quantity data on a linear scale
+        axes[1, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
+        axes[1, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
+        axes[1, plot].set_ylabel("Quantity", color="blue")
+        quantities = [trade.quantity for trade in trade_queue]
+        axes[1, plot].plot(timestamps, quantities, linewidth=0.8, label="Quantity", color="blue")
+        axes[1, plot].tick_params(axis="y", labelcolor="blue")
+
+        # Plot the price on the master plot
+        ax_master.plot(timestamps, prices, label=symbol)
+
+    ax_master.legend()
     plt.tight_layout()
     plt.show()
-
 
 
 def analyze_price_data(data: pd.DataFrame):
