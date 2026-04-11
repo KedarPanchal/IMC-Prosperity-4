@@ -1,8 +1,11 @@
+# pyright: reportUnusedFunction=false
+
 import sys
 import os
 from collections import defaultdict
 import pandas as pd
 import matplotlib.pyplot as plt
+import mplcursors
 
 
 # -- HELPER FUNCTIONS ---------------------------------------------------------
@@ -42,7 +45,6 @@ class TradeData:
         return self.timestamp < other.timestamp
 
 
-# TODO: Add functionality to display the trades as an iterative animation
 def analyze_trade_data(data: pd.DataFrame, filename: str):
     # Dictionary mapping trade items to their data by timestamp
     trades = defaultdict(list)
@@ -92,6 +94,14 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
         prices = [trade.price for trade in trade_list]
         axes[0, plot].plot(timestamps, prices, linewidth=0.8, label="Price", color="green")
 
+        # Create cursor for the price plot
+        price_cursor = mplcursors.cursor(axes[0, plot], hover=True)
+
+        @price_cursor.connect("add")
+        def on_add_price(sel):
+            x, y = sel.target
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nPrice: {int(y)}")
+
         # Plot the quantity data
         axes[1, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
         axes[1, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
@@ -100,9 +110,26 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
         axes[1, plot].plot(timestamps, quantities, linewidth=0.8, label="Quantity", color="blue")
         axes[1, plot].tick_params(axis="y", labelcolor="blue")
 
+        # Create cursor for the quantity plot
+        quantity_cursor = mplcursors.cursor(axes[1, plot], hover=True)
+
+        @quantity_cursor.connect("add")
+        def on_add_quantity(sel):
+            x, y = sel.target
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nQuantity: {int(y)}")
+
         # Plot the price on the master plot
         ax_master.plot(timestamps, prices, label=symbol)
 
+    # Create master cursor
+    master_cursor = mplcursors.cursor(ax_master, hover=True)
+
+    @master_cursor.connect("add")
+    def on_add_master(sel):
+        x, y = sel.target
+        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {int(x)}\nPrice: {int(y)}")
+
+    # Actually plot everything
     ax_master.legend()
     plt.tight_layout()
     plt.show()
