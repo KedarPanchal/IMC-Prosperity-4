@@ -220,12 +220,12 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
 
     # Create a subplot for each price item
     # The first two rows show bid/ask and quantity data for each price item
-    # The third row contain a master subplot of all the price items
-    fig, axes = plt.subplots(3, len(prices.items()), figsize=(12, 6))
+    # The third row contains a master subplot of all the price items
+    fig, axes = plt.subplots(4, len(prices.items()), figsize=(12, 6))
     fig.suptitle(f"Price Data Analysis for {filename}")
-    for ax in axes[2]:
+    for ax in axes[3]:
         ax.remove()
-    ax_master = fig.add_subplot(3, 1, 3)
+    ax_master = fig.add_subplot(4, 1, 4)
 
     # Create a main formatter applied to all axes
     main_formatter = lambda v, _: f"{int(v)}"
@@ -247,7 +247,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     for plot, (symbol, price_list) in enumerate(prices.items()):
         # Set shared axis data
         axes[0, plot].set_title(symbol)
-        axes[1, plot].set_xlabel("Timestamp")
+        axes[2, plot].set_xlabel("Timestamp")
         timestamps = [price.timestamp for price in price_list]
 
         # Plot the bid/ask price data
@@ -278,12 +278,11 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         axes[0, plot].tick_params(axis="y", labelcolor="green")
         axes[0, plot].legend()
 
-        # Plot the quantity data
+        # Plot the bid quantity data
         axes[1, plot].xaxis.set_major_formatter(main_formatter)
         axes[1, plot].yaxis.set_major_formatter(main_formatter)
-        axes[1, plot].set_ylabel("Bid/Ask Volume", color="blue")
+        axes[1, plot].set_ylabel("Bid Volume", color="blue")
         bid_volumes = [price.bid_volume for price in price_list]
-        ask_volumes = [price.ask_volume for price in price_list]
         bid_quantity_artists.extend(
                 axes[1, plot].plot(
                     timestamps,
@@ -294,8 +293,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
                     picker=8
                 )
             )
+        axes[1, plot].tick_params(axis="y", labelcolor="blue")
+
+        # Plot the ask quantity data
+        axes[2, plot].xaxis.set_major_formatter(main_formatter)
+        axes[2, plot].yaxis.set_major_formatter(main_formatter)
+        axes[2, plot].set_ylabel("Ask Volume", color="orange")
+        ask_volumes = [price.ask_volume for price in price_list]
         ask_quantity_artists.extend(
-                axes[1, plot].plot(
+                axes[2, plot].plot(
                     timestamps,
                     ask_volumes,
                     linewidth=0.8,
@@ -304,8 +310,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
                     picker=8
                 )
             )
-        axes[1, plot].tick_params(axis="y", labelcolor="blue")
-        axes[1, plot].legend()
+        axes[2, plot].tick_params(axis="y", labelcolor="orange")
 
         # Plot the bid/ask price on the master plot
         bid_master_artists.extend(
