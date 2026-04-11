@@ -219,8 +219,8 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         price_list.sort()
 
     # Create a subplot for each price item
-    # The first two rows show bid/ask and quantity data for each price item
-    # The third row contains a master subplot of all the price items
+    # Rows 1-3 show price, bid volume, and ask volume data for each price item
+    # Row 4 contains a master subplot of all the price items
     fig, axes = plt.subplots(4, len(prices.items()), figsize=(16, 8))
     fig.suptitle(f"Price Data Analysis for {filename}")
     for ax in axes[3]:
