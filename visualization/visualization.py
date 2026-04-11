@@ -238,10 +238,12 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     # Create arrays to store each artist for rendering the cursors
     bid_price_artists = []
     ask_price_artists = []
+    fair_value_artists = []
     bid_quantity_artists = []
     ask_quantity_artists = []
     bid_master_artists = []
     ask_master_artists = []
+    fair_value_master_artists = []
 
     # Render each individual price item in a subplot
     for plot, (symbol, price_list) in enumerate(prices.items()):
@@ -257,6 +259,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         axes[0, plot].set_ylabel("Bid/Ask Price", color="green")
         bid_prices = [price.bid_price for price in price_list]
         ask_prices = [price.ask_price for price in price_list]
+        fair_value_prices = [(bid + ask) / 2 for bid, ask in zip(bid_prices, ask_prices)]
         bid_price_artists.extend(
                 axes[0, plot].plot(
                     timestamps,
@@ -273,6 +276,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
                     linewidth=0.8,
                     label="ask",
                     color="red"
+                )
+            )
+        fair_value_artists.extend(
+                axes[0, plot].plot(
+                    timestamps,
+                    fair_value_prices,
+                    linewidth=0.8,
+                    label="fair value",
+                    color="blue"
                 )
             )
         axes[0, plot].tick_params(axis="y", labelcolor="green")
@@ -331,9 +343,19 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
                     picker=8
                 )
             )
+        fair_value_master_artists.extend(
+                ax_master.plot(
+                    timestamps,
+                    fair_value_prices,
+                    linewidth=0.8,
+                    label=f"{symbol} fair value",
+                    color="blue",
+                    picker=8
+                )
+            )
 
     # Create cursor for the price plot
-    price_cursor = mplcursors.cursor([*bid_price_artists, *ask_price_artists], hover=mplcursors.HoverMode.Transient)
+    price_cursor = mplcursors.cursor([*bid_price_artists, *ask_price_artists, *fair_value_artists], hover=mplcursors.HoverMode.Transient)
 
     @price_cursor.connect("add")
     def on_add_price(sel):
@@ -343,10 +365,14 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
-        else:
+        elif label == "ask":
             sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
+        else:
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value: {float(y):.2f}")
+            sel.annotation.get_bbox_patch().set_alpha(0.9)
+            sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
     # Create cursor for the quantity plot
     quantity_cursor = mplcursors.cursor([*bid_quantity_artists, *ask_quantity_artists], hover=mplcursors.HoverMode.Transient)
@@ -365,7 +391,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
     # Create master cursor
-    master_cursor = mplcursors.cursor([*bid_master_artists, *ask_master_artists], hover=mplcursors.HoverMode.Transient)
+    master_cursor = mplcursors.cursor([*bid_master_artists, *ask_master_artists, *fair_value_master_artists], hover=mplcursors.HoverMode.Transient)
 
     @master_cursor.connect("add")
     def on_add_master(sel):
@@ -375,10 +401,14 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             sel.annotation.set_text(f"Item: {symbol} bid\nTimestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
-        else:
+        elif type == "ask":
             sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
+        else:
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value: {float(y):.2f}")
+            sel.annotation.get_bbox_patch().set_alpha(0.9)
+            sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
     ax_master.legend()
     plt.tight_layout()
