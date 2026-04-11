@@ -92,15 +92,15 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
         axes[0, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
         axes[0, plot].set_ylabel("Price", color="green")
         prices = [trade.price for trade in trade_list]
-        axes[0, plot].plot(timestamps, prices, linewidth=0.8, label="Price", color="green", picker=8)
+        price_artist = axes[0, plot].plot(timestamps, prices, linewidth=0.8, label="Price", color="green", picker=8)
 
         # Create cursor for the price plot
-        price_cursor = mplcursors.cursor(axes[0, plot], hover=mplcursors.HoverMode.Transient)
+        price_cursor = mplcursors.cursor(price_artist, hover=mplcursors.HoverMode.Transient)
 
         @price_cursor.connect("add")
         def on_add_price(sel):
             x, y = sel.target
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nPrice: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {x}\nPrice: {y}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
@@ -109,16 +109,16 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
         axes[1, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
         axes[1, plot].set_ylabel("Quantity", color="blue")
         quantities = [trade.quantity for trade in trade_list]
-        axes[1, plot].plot(timestamps, quantities, linewidth=0.8, label="Quantity", color="blue", picker=8)
+        quantity_artist = axes[1, plot].plot(timestamps, quantities, linewidth=0.8, label="Quantity", color="blue", picker=8)
         axes[1, plot].tick_params(axis="y", labelcolor="blue")
 
         # Create cursor for the quantity plot
-        quantity_cursor = mplcursors.cursor(axes[1, plot], hover=mplcursors.HoverMode.Transient)
+        quantity_cursor = mplcursors.cursor(quantity_artist, hover=mplcursors.HoverMode.Transient)
 
         @quantity_cursor.connect("add")
         def on_add_quantity(sel):
             x, y = sel.target
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nQuantity: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {x}\nQuantity: {y}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -131,7 +131,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
     @master_cursor.connect("add")
     def on_add_master(sel):
         x, y = sel.target
-        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {int(x)}\nPrice: {int(y)}")
+        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -198,22 +198,38 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     ax_master.yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
     ax_master.set_title("All Price Items")
 
+    # Store the timestamps and prices globally for the master cursor
+    # Store them as a mapping between the symbol and the list of timestamps and prices for that symbol, so we can show the correct data in the master cursor
+    timestamps = defaultdict(list)
+    bid_prices = defaultdict(list)
+    ask_prices = defaultdict(list)
+
     # Render each individual price item in a subplot
     for plot, (symbol, price_list) in enumerate(prices.items()):
         # Set shared axis data
         axes[0, plot].set_title(symbol)
         axes[1, plot].set_xlabel("Timestamp")
-        timestamps = [price.timestamp for price in price_list]
+        timestamps[symbol] = [price.timestamp for price in price_list]
 
         # Plot the bid/ask price data
         axes[0, plot].tick_params(axis="y", labelcolor="green")
         axes[0, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
         axes[0, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
         axes[0, plot].set_ylabel("Bid/Ask Price", color="green")
-        bid_prices = [price.bid_price for price in price_list]
-        ask_prices = [price.ask_price for price in price_list]
-        axes[0, plot].vlines(timestamps, bid_prices, ask_prices, linewidth=0.8, label="Bid/Ask Price", color="green")
+        bid_prices[symbol] = [price.bid_price for price in price_list]
+        ask_prices[symbol] = [price.ask_price for price in price_list]
+        price_artist = axes[0, plot].vlines(timestamps[symbol], bid_prices[symbol], ask_prices[symbol], linewidth=0.8, label="Bid/Ask Price", color="green", picker=8)
         axes[0, plot].tick_params(axis="y", labelcolor="green")
+
+        # Create cursor for the price plot
+        price_cursor = mplcursors.cursor(price_artist, hover=mplcursors.HoverMode.Transient)
+
+        @price_cursor.connect("add")
+        def on_add_price(sel, timestamps_=timestamps[symbol], bid_prices_=bid_prices[symbol], ask_prices_=ask_prices[symbol]):
+            i = sel.index[0]
+            sel.annotation.set_text(f"Timestamp: {timestamps_[i]}\nBid Price: {bid_prices_[i]}\nAsk Price: {ask_prices_[i]}")
+            sel.annotation.get_bbox_patch().set_alpha(0.9)
+            sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
         # Plot the quantity data
         axes[1, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
@@ -221,11 +237,32 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         axes[1, plot].set_ylabel("Bid/Ask Volume", color="blue")
         bid_volumes = [price.bid_volume for price in price_list]
         ask_volumes = [price.ask_volume for price in price_list]
-        axes[1, plot].vlines(timestamps, bid_volumes, ask_volumes, linewidth=0.8, label="Bid/Ask Volume", color="blue")
+        quantity_artist = axes[1, plot].vlines(timestamps[symbol], bid_volumes, ask_volumes, linewidth=0.8, label="Bid/Ask Volume", color="blue", picker=8)
         axes[1, plot].tick_params(axis="y", labelcolor="blue")
 
+        # Create cursor for the quantity plot
+        quantity_cursor = mplcursors.cursor(quantity_artist, hover=mplcursors.HoverMode.Transient)
+
+        @quantity_cursor.connect("add")
+        def on_add_quantity(sel, timestamps_=timestamps[symbol]):
+            i = sel.index[0]
+            sel.annotation.set_text(f"Timestamp: {timestamps_[i]}\nBid Volume: {bid_volumes[i]}\nAsk Volume: {ask_volumes[i]}")
+            sel.annotation.get_bbox_patch().set_alpha(0.9)
+            sel.annotation.get_bbox_patch().set_facecolor("lightblue")
+
         # Plot the bid/ask price on the master plot
-        ax_master.vlines(timestamps, bid_prices, ask_prices, linewidth=0.8, label=symbol)
+        ax_master.vlines(timestamps[symbol], bid_prices[symbol], ask_prices[symbol], linewidth=0.8, label=symbol, picker=8)
+
+    # Create master cursor
+    master_cursor = mplcursors.cursor(ax_master, hover=mplcursors.HoverMode.Transient)
+
+    @master_cursor.connect("add")
+    def on_add_master(sel):
+        i = sel.index[0]
+        label = sel.artist.get_label()
+        sel.annotation.set_text(f"Item: {label}\nTimestamp: {timestamps[label][i]}\nBid Price: {bid_prices[label][i]}\nAsk Price: {ask_prices[label][i]}")
+        sel.annotation.get_bbox_patch().set_alpha(0.9)
+        sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
     ax_master.legend()
     plt.tight_layout()
