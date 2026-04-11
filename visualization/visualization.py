@@ -74,7 +74,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
         ax.remove()
     ax_master = fig.add_subplot(3, 1, 3)
 
-    # Create a master formatter applied to all axes
+    # Create a main formatter applied to all axes
     main_formatter = lambda v, _: f"{int(v)}"
 
     # Set plot data for the master plot
@@ -196,12 +196,12 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         ax.remove()
     ax_master = fig.add_subplot(3, 1, 3)
 
-    # Create a master formatter applied to all axes
+    # Create a main formatter applied to all axes
     main_formatter = lambda v, _: f"{int(v)}"
 
     # Set plot data for the master plot
-    ax_master.xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
-    ax_master.yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
+    ax_master.xaxis.set_major_formatter(main_formatter)
+    ax_master.yaxis.set_major_formatter(main_formatter)
     ax_master.set_title("All Price Items")
 
     # Store the timestamps and prices globally for the master cursor
@@ -219,8 +219,8 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
 
         # Plot the bid/ask price data
         axes[0, plot].tick_params(axis="y", labelcolor="green")
-        axes[0, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
-        axes[0, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
+        axes[0, plot].xaxis.set_major_formatter(main_formatter)
+        axes[0, plot].yaxis.set_major_formatter(main_formatter)
         axes[0, plot].set_ylabel("Bid/Ask Price", color="green")
         bid_prices[symbol] = [price.bid_price for price in price_list]
         ask_prices[symbol] = [price.ask_price for price in price_list]
@@ -238,8 +238,8 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
         # Plot the quantity data
-        axes[1, plot].xaxis.set_major_formatter(lambda x, _: f"{int(x)}")
-        axes[1, plot].yaxis.set_major_formatter(lambda y, _: f"{int(y)}")
+        axes[1, plot].xaxis.set_major_formatter(main_formatter)
+        axes[1, plot].yaxis.set_major_formatter(main_formatter)
         axes[1, plot].set_ylabel("Bid/Ask Volume", color="blue")
         bid_volumes = [price.bid_volume for price in price_list]
         ask_volumes = [price.ask_volume for price in price_list]
