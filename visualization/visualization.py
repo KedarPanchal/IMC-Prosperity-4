@@ -6,7 +6,6 @@ from collections import defaultdict
 import pandas as pd
 import matplotlib.pyplot as plt
 import mplcursors
-import numpy as np
 
 
 # -- HELPER FUNCTIONS ---------------------------------------------------------
@@ -69,7 +68,12 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
-    fig, axes = plt.subplots(3, len(trades.items()), figsize=(16, 8))
+    fig, axes = plt.subplots(
+            3,
+            len(trades.items()),
+            figsize=(16, 8),
+            squeeze=False
+        )
     fig.suptitle(f"Trade Data Analysis for {filename}")
     for ax in axes[2]:
         ax.remove()
@@ -221,7 +225,12 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
-    fig, axes = plt.subplots(4, len(prices.items()), figsize=(16, 8))
+    fig, axes = plt.subplots(
+            4,
+            len(prices.items()),
+            figsize=(16, 8),
+            squeeze=False
+        )
     fig.suptitle(f"Price Data Analysis for {filename}")
     for ax in axes[3]:
         ax.remove()
@@ -396,7 +405,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     @master_cursor.connect("add")
     def on_add_master(sel):
         x, y = sel.target
-        symbol, type = sel.artist.get_label().split()
+        symbol, type = sel.artist.get_label().split(' ', 1)
         if type == "bid":
             sel.annotation.set_text(f"Item: {symbol} bid\nTimestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
