@@ -407,7 +407,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         x, y = sel.target
         symbol, type = sel.artist.get_label().split(' ', 1)
         if type == "bid":
-            sel.annotation.set_text(f"Item: {symbol} bid\nTimestamp: {int(x)}\nBid Price: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif type == "ask":
