@@ -1,0 +1,285 @@
+"""
+Strategy H — Deliberately overfit to `visualization/csv/prices_round_0_day_-1.csv`.
+
+Embeds a lookahead oracle: per tick index (timestamp // 100), the next-tick TOMATO
+mid move from that CSV (quantized). The bot uses this future information to lean
+long before an up move and short before a down move.
+
+This will NOT generalize to other seeds, days, or session lengths. For lab / humor only.
+
+Data: 10_000 ticks (timestamps 0 … 999_900, step 100). Shorter sessions only use
+the prefix of the oracle (indices 0 .. min(idx, N-1)).
+
+Emeralds: same baseline MM as production (not oracle-cheated).
+"""
+
+from datamodel import OrderDepth, TradingState, Order
+from typing import Dict, List, Optional
+import base64
+import json
+import struct
+import zlib
+
+DEFAULT_LIMIT = 50
+POSITION_LIMITS: Dict[str, int] = {"EMERALDS": 80, "TOMATOES": 80}
+SKEW_LIGHT = 0.25
+SKEW_HEAVY = 0.60
+EMERALD_FAIR_VALUE = 10000
+EMERALD_TAKE_EDGE = 1
+
+_ORACLE_B85 = (
+    "c-"
+    "n1TYl|aEt`#CM#u#IYW?7cY{{J5~?1!N!j7f}1f{g3X^C)V1*=e_(j)y`zl8zK+B4V0<F7z75nE$%cHkgiar|0LL`QH5RF0b"
+    "dmntY?n`}4W^YQAnZ(qmlh6~*ZO=SDw6-<#j`&zp?Y;vKf}{M#)?I&4;arJpq$_4%2-"
+    "f7UeD>T}FL+qiw+*XLMvq&pya*JqvUdwh1Tqqomz+qit*Kht|~Szr6ibfNiaw^jIj^KTA$s`PY5lJCqJ51YH$u5w3BB>3ku-"
+    "$mwR*$vw#M7mxbdA_=R#w0tBDxdj3mz@7AWuE79j2ul@@RSqOS#F=z95FV<*^|lZ@mXCnIl6}Yd}PfcwU@1+f8N>4nOsE6^8"
+    "DD=J@@<bIe`|E)Ax?yYv#}w)UN~1$5)eDhVPT;?0o$i=lEP#o+qPPw~v$_Q=a}j$(!uz6<Xw$(#WNyd%AyQL~+WekgUo@Pjm"
+    "i%8~+I#^!cvz*JqB@65l1m`Atn}Hg2BmAtS4-"
+    "x~)%bgTcmBlh3vb4qZ6L>+@`*X#q`S=9W`suCMpu7M*&WvYwxOkAI0)RYcIIrzBGc_Tln&N$4tc{$nuxw*Kui@}JN6Zh!tgJ"
+    "cr+__BHgdYL%GIz1gZ%UQ>JD!%@S}&cDxaVrXGi8U*LVHt)k^(#yBFXslx-"
+    "E&E9cPON?jnkeeb&(&_3XpvUxv7gxG^Y<$d^JHr~Y~Rn3YiXce6!@@-v?gNw#7VlvI4bq9b$|Z|-;z3tE4&--Ad)xH%d^axS"
+    "a^}W&oS?|`-`mU7zFk*wJfbJ5yPKLZ6UMoKl0>6fV1GhO*Blkok9C_Km2*hWi_Al^J->;sJ-*u$M}L%r-Ch0nkjk3l(bv-"
+    "l=|=VR%taSz|IyrcadG>>77N2S6M5E-aSJjagV;wMlP=_$avcD*XNtv{Dw-n+25$G4BE{0)G^Y3lVHvo3Ahwal-"
+    "{}n67I3iX#vlOL|k_IOlkzjoM~VFssZ{FNStlYRdc2X*uod(3{wYQU^$Ke=zY`kq)oX6`4f(yiD`RCroqS^=6Xi_)d+oJYWg"
+    "MYhnN4lmCe0AKI_^{yWDG{KTZG9%4zrr92)Pd^XJqSbu~BBqpEGw&ihBF=C|(>W7Jco5;>6J)tvVs60ETw2Tsz*6W!#Uxij^"
+    "~^Vw;Q^V2VyXV49e7-"
+    "FeJ@oM#rd^ft&7I73Wr>tYmNHX75By)XYN~xv&&ePgsKh;a)OzDBIHY$M~DaKv}!#a%SE1413HrnDF(hD6R6P4qi@O&B#sf`"
+    "h(-=C*Q1&ij|JQ{j`R^!$=zcYQ|#ByF@vKD*ZWc}CB>U-E&qRd2z9(Mkc(|(E;pAEUWU=IT>9TCUO-"
+    "A<jrCl85q6(dk~c@|8$Pt`=#hCWgQTkI;)CA~r)iPzo6zX`IYcQ_yxcAaUFg=Dmx@&0Nx9WsQ}?%YW?fByQ&jVU8l*NkR%`3"
+    "+GTL&Q5jdyb5V`ba!=`T0&;NKSpQThi04Kc#d4#&O`|VUdU1Ui)a+JM^cI^jM7)t!rGBnZ+I%(kT$defbU;o0jVOa+mcg64v"
+    "N&uI4o`x?!-PCX##@B9VDy^pVwTs7@WG#V5+hR<o)3#N{Ik*PF*kjqW2Oi6-"
+    "7jaXS%Wv#f20Jl3uF5;~MwE5#ZavQPAAEqntNTxmt_bEWU$XUgR9Vdhn;xqFGP5d;0%%sc-l*%^hbdSM-ok$zTVMa1<v=c(k"
+    "=p5eOB?}i0WiPN^g$)}x;OZ|7Q;dp&DjiHcw#dQ3m_Vz7kq$hBK%mw|N`=IGzFCYDQ4b=U)=94_Vk37u-"
+    "*aR|^^EjtwygfLCw&dFxpVU0d5wxByE!hi)P23_6aZQ`3{Vo}KAIKifS2w{LKPT1BT{7KPp6r2jZ#kz9{KLugG*@}Rr_(c@E"
+    "mJ02PsViVNgas~$cOn?w&wP@$M-"
+    "#A(`O%ox+$p+k%Z@5FTkLA9usdLf|!_Ja@byGqB=Tey;E1zdhXz35OrVngpPAHRtFIu<D@*FM(%}@ZCE`|dWR~h7Q5FR1wA6"
+    "h_ByWTW~tkmgAj0M8XxGq7ek$#Sy_*1(S5kaCqt9@+*cs0dJE-CPgF-l-"
+    "J9d!r=D5Qf4>Z?^pjKgB`&d^=O%lg+KJp=2(11pt9QHpv1ph|Mt~f`kHo<q`CnvJd0HAd>A$b`nd<9q49QVqiMg-"
+    ";$@`e2YK-hY>IPnpBbv(mAnlaJpS^}gg&lkZft~4-?}(fn@fdg?CeI!*b4X0-"
+    "fiY@}eIz^bviwft$*aT(_=H;1X_?LAtjS6|1XJH58H?x8y!$Be@sDL8X@gJU_6V3?$LNgOSopi-"
+    "XPD|L@Pr%<F2P&s2>V$1p)OL#4AQwc9qk;s@Fq-Qt}#dO9JK|WAZBKK*nlHCO8j3LXW!S)C-?9;B-sFses&pcGp5sbc!~-"
+    "~Y8)?Ym|C)W_c`Lz@DQ14)kpo_*|HCYNKKjlH{e@x*R7lk6QZGNRv*dNs2r}wZ6S^z+IntuD!FD~>JEuI7mEot)3p4AOI^o#"
+    "z0Bk@ThiI?5_4+?KXWB#kM6-"
+    "A68$Zo9Rrzq*Y6)g2{v!2xWQE8WD3@$0WX>nXR@NT(&6k`^6~im)qHreB}`evLI&0u3y(#%kz6S1#r-qlzIbexW-m-"
+    "(<$fBlE?C)V;+LCnvk$}I!*U!d+QxB0cf;45Lv#M=t)3P=qR&lFp4B1E$(2Ds7J`A5^SHWO^)It%#Y&1ZCCEE;42=kn;aH+p"
+    "cab_9#!6Q~{q2{1t^UTbkRlso!H2Jc^qCi<^pdl>NQTXjDPl~$kF0L;uNsKsQ!@*hwL4|BPQkk{t^5%pT^H8fQA1~VSWM7i*"
+    "Dr}$&tk#PkR$GCuC+lm!6kZ?IH8rg#9E!jYAZut*uaycjJoa7&(cRa+wS$O9}!bJ6RQzulgjB4QdjSJr@zemYL-&-"
+    "4~kfoEr;5ol8|vg58OqT;Vd#u9;4aWsD(`Qd6$gWtGAgSeT(0wlFMlRb}#Hl0|axu*Ax9J7@(1!)_*cqOM5xMZuX(|g?I6S?"
+    "uibF*ji}x3pi(&P;yaO;XO)~=qb_Q+w#OiqL#bV?2|ip44t!U{ksuzy}6#V=p8{VS-*2Lz3;*-"
+    "xD|XG<D;7L5+qtRH7goVs}ZBuW8pj)SY@~SQ=p>mFg>L5ku^_GYi}hJ<6o8LX58sEvO=2`LigUuG$r%RW@laE=myrB_`FufF"
+    "+*zPQR!87)fS%UE{O6H{Zgs89^51Iz%Gcx81{_N+LF<wt<`+!H!}Cg;G5++T&g2~BzAEAJnIw~v3A3jHDXVlW#WIRqhyAgm7"
+    "7HTF4^oga8;kxniukl%6R37e-`AgbpdDo=4>~KdNeM+MNR4j=rVWx4E`x=d)jNTMLgm-"
+    "i)ilHa4LL2M%+#8=uXKndwnp`y;f#%FKhi;<*`Fw!@gvsS$lQsI>TA*C5P3>I*|#h^%*f$Uyp0)qx!7*_m`nM>RqjSaEZY(N"
+    "2{@MM!K~^cR)7+1G}#KonHE9{1<8#Tj_D&sG4|glUbjRc$4+JUNmE2v9|nxdWXui!RIGht3h*B{}*^PwLv}QIq>3Su^rRe6N"
+    "D87TC%QM-`v6vrv~XBm5uXVw^CPNs`V=6mL^Az9FW&1kMU1An&u7PQk}0h>x{)MbVWNXrj}r55Ji>SS*n*sz0M0w4LzF-Td)"
+    "Ag9$=(j?Jpxyj3E)f`p9pdfj>ho_K?mb&$*w*KF-%0)K00KokmA}RC)QUQ_0TfIelA?h-"
+    "cDuy=&%(IeYRUB(X^=wxT_A&fTnxq9fk4+*S8dH)b}d%*PqHpGJrpwU&a2rT_k-"
+    "2h^Y&ArG1OgBfIcmPUwbo~!(pyK)Q2ME1z}FVQ`Ql@dRln=rQ5h#562KNp>DORwHBxJ1*+QBbM!d8DDZuOr{d^YcD3d+lIjn"
+    "q~HpJSxuIAre-bo=;y*ds^tb$80XytSF>sX{G-uEj4Sa$q+GNme-"
+    "g1h|c0NtlYBi>&v=`o|4lhUxJ9)L;snuQkfh=@`BiV(@J#V{6cm~AnWoL?bR-#zYJ|wE|V6Pj>4b5f-"
+    "9k4EFYD84{ZTCphgYwvZ5ga6N*;ap>CO-"
+    "3s`TjT?g2U(#TN(D>jF9(`KgBfK53Y>K~Gg^^tZu{p#EDC+{5F$8WoEzD%>jr*&1{N^b=bE!}i$cN+&E+`tF*=nCw@o-"
+    "tJLZ&nq`Xg&R&R<JPQ;nF=YXS>D|WIYsn>7>la)BValx*d}pbq!4YJ4e2?_FiRW#1XQY4Jfyo6%*|GzCp%aXPk3A2Wq5OQn2"
+    "^SWBRPpuvMx1pn`a{`q%+Myoz#!eqCvg2u-"
+    "7pRwBD&tUa0xmHLeSDEeF}kdmodlfKdjJ5RWk2&9!tRps+nf9fchp6wRAdLP*FTNwq<6tEjQb;3Dvm)V#2nwgtqC(mZgLuwm"
+    "GCgkj|$0}bka$D+kwN~Arl30C}vW$mmd5yu{?<qR_`73XLRTS+8alLE*(2=dUk^1I!eTLJ`Im!CUYSq%~FJ$>y?!mKt=S6i4"
+    "KY^FYGOcB<_(ZjCofh6Kr^335YTPDqpLg*742+pw>vf!mWssPORwg+)=-"
+    "(a1X&oo?a(SXBK{M<{V{#u(L`!esPvKMWzD9DFEpX{~mjG7Vd5NtYnQq2_)m|X4z2;p5w(8`)^j1;S!ih4*P!`fFJ=b8zJm="
+    "m=WrI?0-s2iwdjvIr$pmiW-_k|L5HDd)skP86;f;%wUL&stH><MbO^1{aqO)V-v-qmSiZ#dH2gWCBALkaV1X-"
+    "`?Cf1)!`9oxj@j@S%JNJl#ck4FzSK;7wwcdN=*&Oy!^ih3tYD?|9a|Y!Gs7KMCtnb{-"
+    "TF;bKASUFin^@x}v4wm6YHwABE~g7&oTmQdDm-"
+    "b6&fg<?2pV)2spV{fR*rPYPjTti;;2AmpQUSpYH^ow`p^tNBlaf!KiXBfk5;Ns8YN}lS?wQ1jIFgqhQ5Z^N7LV7F&-"
+    "6oSA+Y}1{Q!g<T$6DR;mkHC$HJyQ!>eFiTlV*=CrU1mx$Td+K=y35!^GC+E?lKWGWu@(Z?m~u$i%5B-"
+    "S{aEWeg<aL$YduF)+<5M^MTr8BuK9J5YKRD`#|$f_z|!ROW<k7jJ-"
+    "0bNFJ&zqq)a+@7;F13{(i=i82MXkh0c;8B+$UCiZ&w6jCfgB!!oj2$e$4-"
+    "J4|9=>^yDavhT}vH0$T!Q08{r+l>_qR8bNUIr7A-qUMZkLl9yTt+xwT)2l64!^>XX!PpTczA=^UKs%6Mp8+X1`par2Iiy-"
+    "7}yqdt+=>SMm5(xkEf)$S2C(yWMzwAk{i|5!BC2kIAg@pvZTaaOHH9HaICQ>lbx4WkFD{6yu<J2TL4;Wxdjpjm|K-"
+    "oyEq+DpXH%SX%2FTWp9&lWR7v~uSO=lV3(`-)pRjq(=L5m-"
+    "b}C1pB;pY+{gMfVW=@Ku~cs(Fj64~#02<5BcsiPak1x4}#|V`1#8+@X7fsMhF_Wk=aeygWrLxRrju%syLqtG48(WPLFN%%QI"
+    "I5w?fD#k!YMbWl*aOR@=iqeRH=Vjgg3%;l!~?_EkaxR;yj<fYO=g=@iXB?f#T$+D<KLw#W7fZ|32L-"
+    "mRY?;#<xd4(Ph<R!3s6FK*ccKh&iIV2MO7Bt1~S`JR>9$NGxte>v_S+W@K1=LJ=3#-"
+    "w4p(&YqC$bUtD%S3eW32bSRaPpYE3j>No9KvpiJ0wp_ff4%u-IqboFnLvt(p2$?h2j@!|ERK7PYuO)*Cj-"
+    "6|_JBU+byxUC2~lBu0ITU$6bE4EL96gyf%oS$A_iMeMrJnNJcoe9L*R)s8;$mVV_UIBIx)p2*P6zyB6(K{n_TcZjIuBbli*K"
+    "!z>qS1Qfj{Bn!v0ohNY+AXYilQRQr5S6oaPqe~Ubzo)mwbvwFDi`b5<)|ZVc6+G-"
+    "7mB}eklfR5^1*zB;>O9`i+54iT6_M!Lh?F!kFr*2W=6h`^^UaH^yXX|>$T<Pu>WEM$$4IZ3+N+twbsh{A3B-"
+    "zM6)M7^Jeeo&)%<#bWCQARpa_rZjkEfs(qiJ4x*a$`@Tc1M7P5D=iNqLzM(VJ4h-B~D@=oTW7nJTeRzjV|Mfcw-nD{ku;0W;"
+    "jltUyJ!+*_YNZ3Q6`uAcoWR;W?EmuEqt^Mq1pgcxpHWdr>+TC1z$M3g2M2M${r<ILm;BrfI*eLDn2gZ#=Isfpp;*yz@3sZc)"
+    "&ieSRC`uyx5ZglmGn)XV>hd9q?fFfB1eV>{o<`uJG@r;Fr4ebIwkLrUNm#Mr`@*j{<w#9TK;W)c@O(72dpn~xv`J;A`;)u_N"
+    "y3utTw^GPaxaJ(Sg*6q4Lb-_YSbf3u|0VSpBVcVyNglmDr$<%xTx0U3IJvqV?B1TH)YN(P4E01}M88>y1gg_g(91^+p=<`TQ"
+    "%=UvFO@%S{&C{|@<43+CiqGRj_JJBFvcL*z{Lo^6NKa$(ESH}`=(Ao;s6cS9$PL7ii&oyWY~IHTovQanoWD6h&q>u9~qgxvj"
+    "FQ%i0-ar=PZ$e@D88GD~#o-N|rwa*w=F=L&l`C-51n2|IumAzK7&klWzwYEagN8f(kL}I9$*N*nzJd;+lZ`O6o3%A43C-"
+    "{!LCVTW9^nty`9?i`9=dCb^wI{E3gJJzDSxD@C$e!(U)J(YKIJlp+%B}CeN3w)?^BCh}E}p2tFHI#Y<{eE8zd6yPD%F=?Xvh"
+    "jqAGM#h-"
+    "bdu6M?^Wi{7szoZY?tA9vie@k%>kbeelwMTYtj{vu^h$&RZZ`j*+wWtKjdg;N3ao*fbKkfJdYS)BHx@0e7qks*((KL%%7Uzf"
+    "a;3Ztle;t$p%u@tA7`(9afo1bX~-7+amF-"
+    "j3_#cYbPbL5oxB_WBImvUeC@BwfeJTk~Gy%vin$8{^%n41G9UctiiSmMd|vT&rI6fxY_ZPpd|FZTAJW*NmNSGEdeO@mE(`!R"
+    "{Q@Z)PigY|_znlL%|-(^+E2`|^teUQ<F&8Ed0gBCFUE{XfVLfqV"
+)
+
+_ORACLE_TICKS: Optional[List[int]] = None
+
+
+def _oracle_table() -> List[int]:
+    global _ORACLE_TICKS
+    if _ORACLE_TICKS is None:
+        raw = zlib.decompress(base64.b85decode(_ORACLE_B85.encode("ascii")))
+        n = len(raw) // 2
+        _ORACLE_TICKS = list(struct.unpack("<" + "h" * n, raw))
+    return _ORACLE_TICKS
+
+
+def best_bid_ask(od: OrderDepth):
+    bb = max(od.buy_orders.keys()) if od.buy_orders else None
+    ba = min(od.sell_orders.keys()) if od.sell_orders else None
+    return bb, ba
+
+
+def clamp(v, lo, hi):
+    return max(lo, min(hi, v))
+
+
+def get_limit(product: str) -> int:
+    return POSITION_LIMITS.get(product, DEFAULT_LIMIT)
+
+
+class Trader:
+
+    def run(self, state: TradingState):
+        result: Dict[str, list] = {}
+        trader_state: Dict = {}
+        if state.traderData:
+            try:
+                trader_state = json.loads(state.traderData)
+            except (json.JSONDecodeError, TypeError):
+                trader_state = {}
+
+        oracle = _oracle_table()
+        n_oracle = len(oracle)
+        tick_idx = min(max(0, state.timestamp // 100), n_oracle - 1)
+        lookahead = oracle[tick_idx] / 4.0
+
+        for product in state.order_depths:
+            od = state.order_depths[product]
+            pos = state.position.get(product, 0)
+            limit = get_limit(product)
+            bid, ask = best_bid_ask(od)
+
+            if bid is None or ask is None:
+                result[product] = []
+                continue
+
+            orders = []
+            max_buy = limit - pos
+            max_sell = limit + pos
+            pos_frac = pos / limit if limit > 0 else 0
+
+            if product == "EMERALDS":
+                buy_take_px = EMERALD_FAIR_VALUE - EMERALD_TAKE_EDGE
+                sell_take_px = EMERALD_FAIR_VALUE + EMERALD_TAKE_EDGE
+
+                for px in sorted(od.sell_orders):
+                    if px > buy_take_px or max_buy <= 0:
+                        break
+                    qty = min(max_buy, -od.sell_orders[px])
+                    if qty > 0:
+                        orders.append(Order(product, px, qty))
+                        max_buy -= qty
+
+                for px in sorted(od.buy_orders, reverse=True):
+                    if px < sell_take_px or max_sell <= 0:
+                        break
+                    qty = min(max_sell, od.buy_orders[px])
+                    if qty > 0:
+                        orders.append(Order(product, px, -qty))
+                        max_sell -= qty
+
+                bid_offset = 7
+                ask_offset = 7
+                if pos_frac > SKEW_HEAVY:
+                    bid_offset, ask_offset = 8, 6
+                elif pos_frac > SKEW_LIGHT:
+                    ask_offset = 6
+                elif pos_frac < -SKEW_HEAVY:
+                    bid_offset, ask_offset = 6, 8
+                elif pos_frac < -SKEW_LIGHT:
+                    bid_offset = 6
+
+                l1_bid = EMERALD_FAIR_VALUE - bid_offset
+                l1_ask = EMERALD_FAIR_VALUE + ask_offset
+                if l1_ask > l1_bid:
+                    l1_buy = clamp(int(max_buy * 0.6), 0, max_buy)
+                    l1_sell = clamp(int(max_sell * 0.6), 0, max_sell)
+                    if l1_buy > 0:
+                        orders.append(Order(product, l1_bid, l1_buy))
+                        max_buy -= l1_buy
+                    if l1_sell > 0:
+                        orders.append(Order(product, l1_ask, -l1_sell))
+                        max_sell -= l1_sell
+                    if max_buy > 0:
+                        orders.append(Order(product, l1_bid - 1, max_buy))
+                    if max_sell > 0:
+                        orders.append(Order(product, l1_ask + 1, -max_sell))
+                result[product] = orders
+                continue
+
+            if product == "TOMATOES":
+                buy_edge, sell_edge = 1, 1
+                if lookahead > 0.25:
+                    buy_edge, sell_edge = 2, 0
+                elif lookahead < -0.25:
+                    buy_edge, sell_edge = 0, 2
+
+                if pos_frac > SKEW_HEAVY:
+                    buy_edge, sell_edge = 0, 2
+                elif pos_frac > SKEW_LIGHT:
+                    sell_edge = max(sell_edge, 2)
+                elif pos_frac < -SKEW_HEAVY:
+                    buy_edge, sell_edge = 2, 0
+                elif pos_frac < -SKEW_LIGHT:
+                    buy_edge = max(buy_edge, 2)
+
+                our_bid = bid + buy_edge
+                our_ask = ask - sell_edge
+                if our_ask > our_bid:
+                    l1_buy = clamp(int(max_buy * 0.6), 0, max_buy)
+                    l1_sell = clamp(int(max_sell * 0.6), 0, max_sell)
+                    if l1_buy > 0:
+                        orders.append(Order(product, our_bid, l1_buy))
+                    if l1_sell > 0:
+                        orders.append(Order(product, our_ask, -l1_sell))
+                    l2_buy = max_buy - l1_buy
+                    l2_sell = max_sell - l1_sell
+                    if l2_buy > 0:
+                        orders.append(Order(product, our_bid - 1, l2_buy))
+                    if l2_sell > 0:
+                        orders.append(Order(product, our_ask + 1, -l2_sell))
+                result[product] = orders
+                continue
+
+            buy_edge, sell_edge = 1, 1
+            if pos_frac > SKEW_HEAVY:
+                buy_edge, sell_edge = 0, 2
+            elif pos_frac > SKEW_LIGHT:
+                sell_edge = 2
+            elif pos_frac < -SKEW_HEAVY:
+                buy_edge, sell_edge = 2, 0
+            elif pos_frac < -SKEW_LIGHT:
+                buy_edge = 2
+            our_bid = bid + buy_edge
+            our_ask = ask - sell_edge
+            if our_ask > our_bid:
+                l1_buy = clamp(int(max_buy * 0.6), 0, max_buy)
+                l1_sell = clamp(int(max_sell * 0.6), 0, max_sell)
+                if l1_buy > 0:
+                    orders.append(Order(product, our_bid, l1_buy))
+                if l1_sell > 0:
+                    orders.append(Order(product, our_ask, -l1_sell))
+                l2_buy = max_buy - l1_buy
+                l2_sell = max_sell - l1_sell
+                if l2_buy > 0:
+                    orders.append(Order(product, our_bid - 1, l2_buy))
+                if l2_sell > 0:
+                    orders.append(Order(product, our_ask + 1, -l2_sell))
+            result[product] = orders
+
+        return result, 0, json.dumps(trader_state)
