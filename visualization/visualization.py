@@ -22,11 +22,13 @@ def castable(value, to_type):
         return False
 
 
+# Averages a list of values, ignoring any that are not castable to float or are NaN
 def avg(values: list):
     actual = list(filter(lambda v: pd.notna(v) and castable(v, float), values))
     return sum(map(float, actual)) / len(actual) if actual else 0
 
 
+# Loads a dataframe into a dictionary of lists of objects, keyed by a specified column
 def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
     # Create the object for each row and add it to the dictionary
     for _, row in data.iterrows():
@@ -38,6 +40,8 @@ def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
         obj_list.sort()
 
 
+# Creates a grid of subplots with a shared x-axis
+# Also creates a master subplot on the bottom row for all items
 def make_plots(title: str, rows: int, cols: int):
     fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
     fig.suptitle(title)
@@ -53,6 +57,8 @@ def make_plots(title: str, rows: int, cols: int):
     return fig, axes, axes_master
 
 
+# Plots non-master data on a subplot with the given parameters
+# Also adds the artists to the given list for rendering the cursors
 def plot_data(
         axis,
         timestamps: list[int],
@@ -89,6 +95,7 @@ def plot_data(
 
 # -- DATA CLASSES -------------------------------------------------------------
 
+# Data for a single trade, with the timestamp, symbol, quantity, and price
 class TradeData:
     def __init__(
             self,
@@ -103,6 +110,7 @@ class TradeData:
         return self.timestamp < other.timestamp
 
 
+# Data for a single price update
 class PriceData:
     def __init__(
             self,
@@ -254,7 +262,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         axes[2, plot].set_xlabel("Timestamp")  # type: ignore
         timestamps = [price.timestamp for price in price_list]
 
-        # Plot the bid/ask price data
+        # Plot the bid/ask/fair value price data
         bid_prices = [price.bid_price for price in price_list]
         ask_prices = [price.ask_price for price in price_list]
         fair_value_prices = [(bid + ask) / 2 for bid, ask in zip(bid_prices, ask_prices)]
@@ -317,7 +325,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             artists=ask_quantity_artists
             )
 
-        # Plot the bid/ask price on the master plot
+        # Plot the bid/ask/fair value price on the master plot
         bid_master_artists.extend(
                 ax_master.plot(
                     timestamps,
