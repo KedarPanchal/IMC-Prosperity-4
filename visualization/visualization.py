@@ -28,9 +28,10 @@ def avg(values: list):
     return sum(map(float, actual)) / len(actual) if actual else 0
 
 
-def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list]):
+def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
     for _, row in data.iterrows():
-        pass
+        # Assume obj takes in kwargs
+        dict[row[key]].append(obj(**row.to_dict()))  # type: ignore
 
 
 # -- DATA CLASSES -------------------------------------------------------------
@@ -41,10 +42,10 @@ class TradeData:
             self,
             **kwargs
             ):
-        self.timestamp = kwargs["timestamp"]
-        self.symbol = kwargs["symbol"]
-        self.quantity = kwargs["quantity"]
-        self.price = kwargs["price"]
+        self.timestamp = int(kwargs["timestamp"])
+        self.symbol = str(kwargs["symbol"])
+        self.quantity = int(kwargs["quantity"])
+        self.price = float(kwargs["price"])
 
     def __lt__(self, other):
         return self.timestamp < other.timestamp
@@ -55,8 +56,8 @@ class PriceData:
             self,
             **kwargs
             ):
-        self.timestamp = kwargs["timestamp"]
-        self.product = kwargs["product"]
+        self.timestamp = int(kwargs["timestamp"])
+        self.product = str(kwargs["product"])
         self.bid_price = avg([kwargs["bid_price_1"], kwargs["bid_price_2"], kwargs["bid_price_3"]])
         self.ask_price = avg([kwargs["ask_price_1"], kwargs["ask_price_2"], kwargs["ask_price_3"]])
         self.bid_volume = avg([kwargs["bid_volume_1"], kwargs["bid_volume_2"], kwargs["bid_volume_3"]])
@@ -71,13 +72,7 @@ class PriceData:
 def analyze_trade_data(data: pd.DataFrame, filename: str):
     # Dictionary mapping trade items to their data by timestamp
     trades = defaultdict(list)
-    for _, row in data.iterrows():
-        trades[row["symbol"]].append(TradeData(
-            int(row["timestamp"]),  # type: ignore
-            str(row["symbol"]),
-            int((row["quantity"])),  # type: ignore
-            float(row["price"])  # type: ignore
-        ))
+    load_object(TradeData, data, trades, "symbol")
 
     # Check if any data was loaded
     if not trades:
@@ -205,23 +200,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
 def analyze_price_data(data: pd.DataFrame, filename: str):
     # Dictionary mapping trade items to their data by timestamp
     prices = defaultdict(list)
-    for _, row in data.iterrows():
-        prices[row["product"]].append(PriceData(
-            int(row["timestamp"]),  # type: ignore
-            str(row["product"]),
-            row["bid_price_1"],  # type: ignore
-            row["bid_price_2"],  # type: ignore
-            row["bid_price_3"],  # type: ignore
-            row["bid_volume_1"],  # type: ignore
-            row["bid_volume_2"],  # type: ignore
-            row["bid_volume_3"],  # type: ignore
-            row["ask_price_1"],  # type: ignore
-            row["ask_price_2"],  # type: ignore
-            row["ask_price_3"],  # type: ignore
-            row["ask_volume_1"],  # type: ignore
-            row["ask_volume_2"],  # type: ignore
-            row["ask_volume_3"]  # type: ignore
-        ))
+    load_object(PriceData, data, prices, "product")
 
     # Check if any data was loaded
     if not prices:
