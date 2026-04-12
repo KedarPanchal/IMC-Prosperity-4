@@ -2,7 +2,9 @@
 
 import sys
 import os
+from typing import Any
 from collections import defaultdict
+from dataclasses import dataclass
 import pandas as pd
 import matplotlib.pyplot as plt
 import mplcursors
@@ -26,24 +28,45 @@ def avg(values: list):
     return sum(map(float, actual)) / len(actual) if actual else 0
 
 
-# -- ANALYSIS FUNCTIONS -------------------------------------------------------
+def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list]):
+    for _, row in data.iterrows():
+        pass
 
+
+# -- DATA CLASSES -------------------------------------------------------------
+
+@dataclass
 class TradeData:
     def __init__(
             self,
-            timestamp: int,
-            symbol: str,
-            quantity: int,
-            price: float
+            **kwargs
             ):
-        self.timestamp = timestamp
-        self.symbol = symbol
-        self.quantity = quantity
-        self.price = price
+        self.timestamp = kwargs["timestamp"]
+        self.symbol = kwargs["symbol"]
+        self.quantity = kwargs["quantity"]
+        self.price = kwargs["price"]
 
     def __lt__(self, other):
         return self.timestamp < other.timestamp
 
+
+class PriceData:
+    def __init__(
+            self,
+            **kwargs
+            ):
+        self.timestamp = kwargs["timestamp"]
+        self.product = kwargs["product"]
+        self.bid_price = avg([kwargs["bid_price_1"], kwargs["bid_price_2"], kwargs["bid_price_3"]])
+        self.ask_price = avg([kwargs["ask_price_1"], kwargs["ask_price_2"], kwargs["ask_price_3"]])
+        self.bid_volume = avg([kwargs["bid_volume_1"], kwargs["bid_volume_2"], kwargs["bid_volume_3"]])
+        self.ask_volume = avg([kwargs["ask_volume_1"], kwargs["ask_volume_2"], kwargs["ask_volume_3"]])
+
+    def __lt__(self, other):
+        return self.timestamp < other.timestamp
+
+
+# -- ANALYSIS FUNCTIONS -------------------------------------------------------
 
 def analyze_trade_data(data: pd.DataFrame, filename: str):
     # Dictionary mapping trade items to their data by timestamp
@@ -179,27 +202,6 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
     plt.show()
 
 
-class PriceData:
-    def __init__(
-            self,
-            timestamp: int,
-            product: str,
-            bid_prices: list,
-            bid_volumes: list,
-            ask_prices: list,
-            ask_volumes: list,
-            ):
-        self.timestamp = timestamp
-        self.product = product
-        self.bid_price = avg(bid_prices)
-        self.ask_price = avg(ask_prices)
-        self.bid_volume = avg(bid_volumes)
-        self.ask_volume = avg(ask_volumes)
-
-    def __lt__(self, other):
-        return self.timestamp < other.timestamp
-
-
 def analyze_price_data(data: pd.DataFrame, filename: str):
     # Dictionary mapping trade items to their data by timestamp
     prices = defaultdict(list)
@@ -207,10 +209,18 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         prices[row["product"]].append(PriceData(
             int(row["timestamp"]),  # type: ignore
             str(row["product"]),
-            [row[f"bid_price_{i}"] for i in range(1, 4)],
-            [row[f"bid_volume_{i}"] for i in range(1, 4)],
-            [row[f"ask_price_{i}"] for i in range(1, 4)],
-            [row[f"ask_volume_{i}"] for i in range(1, 4)]
+            row["bid_price_1"],  # type: ignore
+            row["bid_price_2"],  # type: ignore
+            row["bid_price_3"],  # type: ignore
+            row["bid_volume_1"],  # type: ignore
+            row["bid_volume_2"],  # type: ignore
+            row["bid_volume_3"],  # type: ignore
+            row["ask_price_1"],  # type: ignore
+            row["ask_price_2"],  # type: ignore
+            row["ask_price_3"],  # type: ignore
+            row["ask_volume_1"],  # type: ignore
+            row["ask_volume_2"],  # type: ignore
+            row["ask_volume_3"]  # type: ignore
         ))
 
     # Check if any data was loaded
