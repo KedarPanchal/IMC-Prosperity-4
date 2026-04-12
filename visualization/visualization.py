@@ -55,32 +55,34 @@ def make_plots(title: str, rows: int, cols: int):
 
 def plot_data(
         axis,
-        axis_color: str,
-        title: str,
-        title_color: str,
         timestamps: list[int],
         data: list[int | float],
         data_label: str,
         data_color: str,
         artists: list,
+        axis_color: str | None = None,
+        title: str | None = None,
+        title_color: str | None = None,
         show_legend: bool = False
         ):
     formatter = lambda v, _: f"{int(v)}"
 
     axis.xaxis.set_major_formatter(formatter)
     axis.yaxis.set_major_formatter(formatter)
-    axis.set_ylabel(title, color=title_color)
-    artists.extend(
-            axis.plot(
-                timestamps,
-                data,
-                linewidth=0.8,
-                label=data_label,
-                color=data_color,
-                picker=8
-            )
-        )
-    axis.tick_params(axis="y", labelcolor=axis_color)
+    if title and title_color:
+        axis.set_ylabel(title, color=title_color)
+    plot = axis.plot(
+        timestamps,
+        data,
+        linewidth=0.8,
+        label=data_label,
+        color=data_color,
+        picker=8
+    )
+    artists.extend(plot)
+
+    if axis_color:
+        axis.tick_params(axis="y", labelcolor=axis_color)
     if show_legend:
         axis.legend()
 
@@ -149,29 +151,29 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
         # Plot the trade data
         prices = [trade.price for trade in trade_list]
         plot_data(
-            axes[0, plot],  # type: ignore
-            "green",
-            "Price",
-            "green",
-            timestamps,
-            prices,
-            "Price",
-            "green",
-            price_artists,
+            axis=axes[0, plot],  # type: ignore
+            axis_color="green",
+            title="Price",
+            title_color="green",
+            timestamps=timestamps,
+            data=prices,
+            data_label="Price",
+            data_color="green",
+            artists=price_artists
             )
 
         # Plot the quantity data
         quantities = [trade.quantity for trade in trade_list]
         plot_data(
-            axes[1, plot],  # type: ignore
-            "blue",
-            "Quantity",
-            "blue",
-            timestamps,
-            quantities,
-            "Quantity",
-            "blue",
-            quantity_artists,
+            axis=axes[1, plot],  # type: ignore
+            axis_color="blue",
+            title="Quantity",
+            title_color="blue",
+            timestamps=timestamps,
+            data=quantities,
+            data_label="Quantity",
+            data_color="blue",
+            artists=quantity_artists,
             )
 
         # Plot the price on the master plot
@@ -257,68 +259,62 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         ask_prices = [price.ask_price for price in price_list]
         fair_value_prices = [(bid + ask) / 2 for bid, ask in zip(bid_prices, ask_prices)]
         plot_data(
-            axes[0, plot],  # type: ignore
-            "green",
-            "Bid/Ask Price",
-            "green",
-            timestamps,
-            bid_prices,
-            "bid",
-            "green",
-            bid_price_artists,
+            axis=axes[0, plot],  # type: ignore
+            axis_color="green",
+            title="Bid/Ask Price",
+            title_color="green",
+            timestamps=timestamps,
+            data=bid_prices,
+            data_label="bid",
+            data_color="green",
+            artists=bid_price_artists,
             show_legend=True
             )
         plot_data(
-            axes[0, plot],  # type: ignore
-            "green",
-            "Bid/Ask Price",
-            "green",
-            timestamps,
-            ask_prices,
-            "ask",
-            "red",
-            ask_price_artists,
+            axis=axes[0, plot],  # type: ignore
+            timestamps=timestamps,
+            data=ask_prices,
+            data_label="ask",
+            data_color="red",
+            artists=ask_price_artists,
             show_legend=True
             )
         plot_data(
-            axes[0, plot],  # type: ignore
-            "green",
-            "Bid/Ask Price",
-            "green",
-            timestamps,
-            fair_value_prices,
-            "fair value",
-            "blue",
-            fair_value_artists,
+            axis=axes[0, plot],  # type: ignore
+            timestamps=timestamps,
+            data=fair_value_prices,
+            data_label="fair value",
+            data_color="blue",
+            artists=fair_value_artists,
             show_legend=True
             )
 
         # Plot the bid quantity data
         bid_volumes = [price.bid_volume for price in price_list]
         plot_data(
-            axes[1, plot],  # type: ignore
-            "blue",
-            "Bid Volume",
-            "blue",
-            timestamps,
-            bid_volumes,
-            "bid",
-            "blue",
-            bid_quantity_artists
+            axis=axes[1, plot],  # type: ignore
+            axis_color="blue",
+            title="Bid Volume",
+            title_color="blue",
+            timestamps=timestamps,
+            data=bid_volumes,
+            data_label="bid",
+            data_color="blue",
+            artists=bid_quantity_artists
             )
 
         # Plot the ask quantity data
         ask_volumes = [price.ask_volume for price in price_list]
         plot_data(
-            axes[2, plot],  # type: ignore
-            "orange",
-            "Ask Volume",
-            "orange",
-            timestamps,
-            ask_volumes,
-            "ask",
-            "orange",
-            ask_quantity_artists
+            axis=axes[2, plot],  # type: ignore
+            axis_color="orange",
+            title="Ask Volume",
+            title_color="orange",
+            timestamps=timestamps,
+            data=ask_volumes,
+            data_label="ask",
+            data_color="orange",
+            artists=ask_quantity_artists
             )
 
         # Plot the bid/ask price on the master plot
