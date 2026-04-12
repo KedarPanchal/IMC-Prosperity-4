@@ -1,6 +1,6 @@
 # pyright: reportUnusedFunction=false
 
-import sys
+import argparse
 import os
 
 from typing import Any
@@ -561,8 +561,15 @@ def analyze_data(file_path: str):
 
 def main():
     """Parse CLI paths and run ``analyze_data`` on each existing file."""
+
+    parser = argparse.ArgumentParser(description="Visualize trade and price data from CSV files.")
+    parser.add_argument("default_files", nargs="+", help="Paths to CSV files for analysis")
+    parser.add_argument("--files", nargs="*", help="Paths to CSV files for analysis explicitly specified with --files")
+    args = parser.parse_args()
+
+    to_parse = args.files + args.default_files if args.files and args.default_files else args.files or args.default_files
     files = []
-    for arg in sys.argv[1:]:
+    for arg in to_parse:
         if os.path.isfile(arg):
             files.append(arg)
         else:
