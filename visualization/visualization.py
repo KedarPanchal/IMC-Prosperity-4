@@ -150,7 +150,12 @@ def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
         obj_list.sort()
 
 
-def make_plots(title: str, rows: int, cols: int):
+def formatter(value: Any, discard: Any):
+    """Format a numeric value as an integer string for axis ticks."""
+    return f"{int(value)}"
+
+
+def make_plots(title: str, rows: int, cols: int, denoised: bool):
     """Create a subplot grid and a full-width bottom axis for combined series.
 
     The last row of the grid is removed and replaced by ``axes_master``, which spans
@@ -167,12 +172,11 @@ def make_plots(title: str, rows: int, cols: int):
     """
     fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
     fig.suptitle(title)
-    formatter = lambda v, _: f"{int(v)}"
 
     for ax in axes[-1]:
         ax.remove()
     axes_master = fig.add_subplot(rows, 1, rows)
-    axes_master.set_title("All Items")
+    axes_master.set_title(f"All Items{' (denoised)' if denoised else ''}")
     axes_master.xaxis.set_major_formatter(formatter)
     axes_master.yaxis.set_major_formatter(formatter)
 
@@ -208,8 +212,6 @@ def plot_data(
     Returns:
         None.
     """
-    formatter = lambda v, _: f"{int(v)}"
-
     axis.xaxis.set_major_formatter(formatter)
     axis.yaxis.set_major_formatter(formatter)
     if title and title_color:
@@ -322,52 +324,55 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         print("No trade data found for analysis")
         return
 
+    # Check if denoising is actually being done
+    denoised = not_identity(denoise_callback)
+
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
-    _, axes, ax_master = make_plots(f"Trade Data Analysis for {filename}", 3, len(trades.items()))
+    _, axes, ax_master = make_plots(f"Trade Data Analysis for {filename}", 3, len(trades.items()), denoised)
 
     # Create arrays to store each artist for rendering the cursors
     price_artists = []
     quantity_artists = []
     master_artists = []
 
-    # Render each individual trade item in a subplot
+    # render each individual trade item in a subplot
     for plot, (symbol, trade_list) in enumerate(trades.items()):
-        # Set shared axis data
+        # set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
-        axes[1, plot].set_xlabel("Timestamp")  # type: ignore
+        axes[1, plot].set_xlabel("timestamp")  # type: ignore
         timestamps = [trade.timestamp for trade in trade_list]
 
-        # Plot the trade data
+        # plot the trade data
         prices = denoise_callback([trade.price for trade in trade_list])
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
-            title="Price",
+            title=f"price{' (denoised)' if denoised else ''}",
             title_color="green",
             timestamps=timestamps,
             data=prices,
-            data_label="Price",
+            data_label="price",
             data_color="green",
             artists=price_artists
             )
 
-        # Plot the quantity data
+        # plot the quantity data
         quantities = denoise_callback([trade.quantity for trade in trade_list])
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title="Quantity",
+            title=f"quantity {' (denoised)' if denoised else ''}",
             title_color="blue",
             timestamps=timestamps,
             data=quantities,
-            data_label="Quantity",
+            data_label="quantity",
             data_color="blue",
             artists=quantity_artists,
             )
 
-        # Plot the price on the master plot
+        # plot the price on the master plot
         master_artists.extend(
                 ax_master.plot(
                     timestamps,
@@ -377,50 +382,50 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise_callback: Call
                 )
             )
 
-    # Create cursor for the price plot
+    # create cursor for the price plot
     price_cursor = mplcursors.cursor(price_artists, hover=mplcursors.HoverMode.Transient)
 
     @price_cursor.connect("add")
     def on_add_price(sel):
-        """Annotate hover selection on a price subplot."""
+        """annotate hover selection on a price subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nPrice{' (denoised)' if not_identity(denoise_callback) else ''}: {y}")
+        sel.annotation.set_text(f"timestamp: {x}\nprice{' (denoised)' if denoised else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
-    # Create cursor for the quantity plot
+    # create cursor for the quantity plot
     quantity_cursor = mplcursors.cursor(quantity_artists, hover=mplcursors.HoverMode.Transient)
 
     @quantity_cursor.connect("add")
     def on_add_quantity(sel):
-        """Annotate hover selection on a quantity subplot."""
+        """annotate hover selection on a quantity subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nQuantity{' (denoised)' if not_identity(denoise_callback) else ''}: {y}")
+        sel.annotation.set_text(f"timestamp: {x}\nquantity{' (denoised)' if denoised else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
-    # Create master cursor
+    # create master cursor
     master_cursor = mplcursors.cursor(ax_master, hover=mplcursors.HoverMode.Transient)
 
     @master_cursor.connect("add")
     def on_add_master(sel):
-        """Annotate hover selection on the combined master axis."""
+        """annotate hover selection on the combined master axis."""
         x, y = sel.target
-        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice{' (denoised)' if not_identity(denoise_callback) else ''}: {y}")
+        sel.annotation.set_text(f"item: {sel.artist.get_label()}\ntimestamp: {x}\nprice{' (denoised)' if denoised else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
-    # Actually plot everything
+    # actually plot everything
     ax_master.legend()
     plt.tight_layout()
     plt.show()
 
 
 def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Callable[[list[int | float]], list[int | float]]):
-    """Plot per-product bid/ask/fair price and volumes, plus combined price series.
+    """plot per-product bid/ask/fair price and volumes, plus combined price series.
 
-    Expects rows loadable as ``PriceData`` (grouped by ``product``).
-    Opens an interactive figure with hover annotations.
+    expects rows loadable as ``pricedata`` (grouped by ``product``).
+    opens an interactive figure with hover annotations.
 
     Args:
         data: Price / order-book history table.
@@ -437,10 +442,13 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         print("No price data found for analysis")
         return
 
+    # Check if denoising is actually being done
+    denoised = not_identity(denoise_callback)
+
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
-    _, axes, ax_master = make_plots(f"Price Data Analysis for {filename}", 4, len(prices.items()))
+    _, axes, ax_master = make_plots(f"Price Data Analysis for {filename}", 4, len(prices.items()), denoised)
 
     # Create arrays to store each artist for rendering the cursors
     bid_price_artists = []
@@ -466,7 +474,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
-            title="Bid/Ask Price",
+            title=f"Bid/Ask Prices{' (denoised)' if denoised else ''}",
             title_color="green",
             timestamps=timestamps,
             data=bid_prices,
@@ -499,7 +507,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title="Bid Volume",
+            title=f"Bid Volume{' (denoised)' if denoised else ''}",
             title_color="blue",
             timestamps=timestamps,
             data=bid_volumes,
@@ -513,7 +521,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
-            title="Ask Volume",
+            title=f"Ask Volume{' (denoised)' if denoised else ''}",
             title_color="orange",
             timestamps=timestamps,
             data=ask_volumes,
@@ -561,15 +569,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif label == "ask":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -582,11 +590,11 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume{' (denoised)' if not_identity(denoise_callback) else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume{' (denoised)' if denoised else ''}: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume{' (denoised)' if not_identity(denoise_callback) else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume{' (denoised)' if denoised else ''}: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -599,15 +607,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Call
         x, y = sel.target
         symbol, type = sel.artist.get_label().split(' ', 1)
         if type == "bid":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif type == "ask":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
