@@ -31,6 +31,7 @@ def make_plots(title: str, rows: int, cols: int, denoised: bool):
         axis.
     """
     fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
+    fig.canvas.manager.set_window_title(title)  # type: ignore
     fig.suptitle(title)
 
     for ax in axes[-1]:
