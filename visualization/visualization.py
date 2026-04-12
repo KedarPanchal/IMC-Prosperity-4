@@ -219,7 +219,7 @@ class PriceData:
 
 # -- ANALYSIS FUNCTIONS -------------------------------------------------------
 
-def analyze_trade_data(data: pd.DataFrame, filename: str):
+def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     """Plot per-symbol trade price and quantity, plus a combined price view.
 
     Expects trade rows loadable as ``TradeData`` (grouped by ``symbol``).
@@ -334,7 +334,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
     plt.show()
 
 
-def analyze_price_data(data: pd.DataFrame, filename: str):
+def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
     """Plot per-product bid/ask/fair price and volumes, plus combined price series.
 
     Expects rows loadable as ``PriceData`` (grouped by ``product``).
@@ -535,7 +535,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     plt.show()
 
 
-def analyze_data(file_path: str):
+def analyze_data(file_path: str, denoise: bool):
     """Load a semicolon-separated CSV and dispatch to trade or price visualization.
 
     Chooses ``analyze_trade_data`` if a ``buyer`` column exists,
@@ -550,9 +550,9 @@ def analyze_data(file_path: str):
     data = pd.read_csv(file_path, sep=";")
 
     if "buyer" in data.columns:
-        analyze_trade_data(data, os.path.basename(file_path))
+        analyze_trade_data(data, os.path.basename(file_path), denoise)
     elif "profit_and_loss" in data.columns:
-        analyze_price_data(data, os.path.basename(file_path))
+        analyze_price_data(data, os.path.basename(file_path), denoise)
     else:
         print("Unknown data being analyzed")
 
@@ -564,7 +564,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="Visualize trade and price data from CSV files.")
     parser.add_argument("default_files", nargs="+", help="Paths to CSV files for analysis")
-    parser.add_argument("--files", nargs="*", help="Paths to CSV files for analysis explicitly specified with --files")
+    parser.add_argument("--files", "-f", dest="files", nargs="*", help="Paths to CSV files for analysis explicitly specified with --files")
+    parser.add_argument("--denoise", "-d", dest="denoise", action="store_true", help="Denoise the data before plotting")
     args = parser.parse_args()
 
     to_parse = args.files + args.default_files if args.files and args.default_files else args.files or args.default_files
@@ -581,7 +582,7 @@ def main():
         return
 
     for file in files:
-        analyze_data(file)
+        analyze_data(file, args.denoise)
 
 
 if __name__ == "__main__":
