@@ -29,9 +29,14 @@ def avg(values: list):
 
 
 def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
+    # Create the object for each row and add it to the dictionary
     for _, row in data.iterrows():
         # Assume obj takes in kwargs
         dict[row[key]].append(obj(**row.to_dict()))  # type: ignore
+
+    # Sort each list of objects by timestamp
+    for obj_list in dict.values():
+        obj_list.sort()
 
 
 # -- DATA CLASSES -------------------------------------------------------------
@@ -78,10 +83,6 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
     if not trades:
         print("No trade data found for analysis")
         return
-
-    # Sort each trade item by timestamp
-    for trade_list in trades.values():
-        trade_list.sort()
 
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
@@ -206,10 +207,6 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     if not prices:
         print("No price data found for analysis")
         return
-
-    # Sort each price item by timestamp
-    for price_list in prices.values():
-        price_list.sort()
 
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
