@@ -141,7 +141,44 @@ class Trader:
                 result[product] = orders
                 continue
 
-            # ── Generic book-relative MM for all other products ──
+            # ── All other products: Wall-Mid-aware MM ──
+            wmid = wall_mid(od)
+            fair = int(round(wmid)) if wmid is not None else (bid + ask) // 2
+
+            for px in sorted(od.sell_orders):
+                if px >= fair or max_buy <= 0:
+                    break
+                qty = min(max_buy, -od.sell_orders[px])
+                if qty > 0:
+                    orders.append(Order(product, px, qty))
+                    max_buy -= qty
+
+            for px in sorted(od.buy_orders, reverse=True):
+                if px <= fair or max_sell <= 0:
+                    break
+                qty = min(max_sell, od.buy_orders[px])
+                if qty > 0:
+                    orders.append(Order(product, px, -qty))
+                    max_sell -= qty
+
+            if abs(pos_frac) > SKEW_HEAVY:
+                if pos > 0:
+                    for px in sorted(od.buy_orders, reverse=True):
+                        if px < fair or max_sell <= 0:
+                            break
+                        fqty = min(max_sell, od.buy_orders[px], pos)
+                        if fqty > 0:
+                            orders.append(Order(product, px, -fqty))
+                            max_sell -= fqty
+                elif pos < 0:
+                    for px in sorted(od.sell_orders):
+                        if px > fair or max_buy <= 0:
+                            break
+                        fqty = min(max_buy, -od.sell_orders[px], -pos)
+                        if fqty > 0:
+                            orders.append(Order(product, px, fqty))
+                            max_buy -= fqty
+
             buy_edge  = 1
             sell_edge = 1
 
