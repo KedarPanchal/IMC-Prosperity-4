@@ -49,7 +49,7 @@ def avg(values: list):
     return sum(map(float, actual)) / len(actual) if actual else 0
 
 
-def stabilize(data: list[int | float], lookback: bool = False):
+def stabilize_data(data: list[int | float], lookback: bool = False):
     """Apply a logarithmic transform to stabilize a numeric series.
 
     Args:
@@ -64,6 +64,19 @@ def stabilize(data: list[int | float], lookback: bool = False):
         return [math.log(data[i] / data[i - 1]) for i in range(1, len(data))]
     else:
         return [math.log(value) for value in data]
+
+
+def denoise_data(data: list[int | float], denoise: bool):
+    """Optionally apply a logarithmic transform to stabilize a numeric series.
+
+    Args:
+        data: Sequence of positive values.
+        denoise: If True, return stabilized data using ``stabilize_data``; otherwise return the original data.
+
+    Returns:
+        List of values, either the original or the stabilized version.
+    """
+    return stabilize_data(data) if denoise else data
 
 
 def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
@@ -258,7 +271,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
         timestamps = [trade.timestamp for trade in trade_list]
 
         # Plot the trade data
-        prices = [trade.price for trade in trade_list]
+        prices = denoise_data([trade.price for trade in trade_list], denoise)
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -272,7 +285,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
             )
 
         # Plot the quantity data
-        quantities = [trade.quantity for trade in trade_list]
+        quantities = denoise_data([trade.quantity for trade in trade_list], denoise)
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
@@ -302,7 +315,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     def on_add_price(sel):
         """Annotate hover selection on a price subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nPrice: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nPrice{' (denoised)' if denoise else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
@@ -313,7 +326,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     def on_add_quantity(sel):
         """Annotate hover selection on a quantity subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nQuantity: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nQuantity{' (denoised)' if denoise else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -324,7 +337,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     def on_add_master(sel):
         """Annotate hover selection on the combined master axis."""
         x, y = sel.target
-        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice: {y}")
+        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice{' (denoised)' if denoise else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -378,9 +391,9 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         timestamps = [price.timestamp for price in price_list]
 
         # Plot the bid/ask/fair value price data
-        bid_prices = [price.bid_price for price in price_list]
-        ask_prices = [price.ask_price for price in price_list]
-        fair_value_prices = [(bid + ask) / 2 for bid, ask in zip(bid_prices, ask_prices)]
+        bid_prices = denoise_data([price.bid_price for price in price_list], denoise)
+        ask_prices = denoise_data([price.ask_price for price in price_list], denoise)
+        fair_value_prices = denoise_data([(price.bid_price + price.ask_price) / 2 for price in price_list], denoise)
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -427,7 +440,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
             )
 
         # Plot the ask quantity data
-        ask_volumes = [price.ask_volume for price in price_list]
+        ask_volumes = denoise_data([price.ask_volume for price in price_list], denoise)
         plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
@@ -479,15 +492,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif label == "ask":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value{' (denoised)' if denoise else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
