@@ -1,6 +1,7 @@
 # pyright: reportUnusedFunction=false
 
 import argparse
+import sys
 import os
 
 from typing import Any
@@ -604,20 +605,23 @@ def main():
     parser.add_argument("default_files", nargs="+", help="Paths to CSV files for analysis")
     parser.add_argument("--files", "-f", dest="files", nargs="*", help="Paths to CSV files for analysis explicitly specified with --files")
     parser.add_argument("--denoise", "-d", dest="denoise", action="store_true", help="Denoise the data before plotting")
+    parser.add_argument("--strategy", "-s", dest="strategy", choices=["haar"], default="haar", help="Which Fourier transform to utilize when denoising the data")
+    parser.add_argument("--passes", "-p", dest="passes", type=int, default=2, help="The number of passes to perform the Fourier transform for")
+
     args = parser.parse_args()
-
+    denoise_args = [arg for arg in ["--strategy", "-s", "--passes", "-p"] if arg in sys.argv]
+    if denoise_args and not args.denoise:
+        parser.error(f"{' '.join(denoise_args)} cannot be specified if --denoise isn't passed")
     to_parse = args.files + args.default_files if args.files and args.default_files else args.files or args.default_files
-    files = []
-    for arg in to_parse:
-        if os.path.isfile(arg):
-            files.append(arg)
-        else:
-            print(f"Unknown argument: {arg}")
-            return
+    if not to_parse:
+        parser.error("No files to parse")
 
-    if not files:
-        print("No files provided for analysis")
-        return
+    files = []
+    for file in to_parse:
+        if os.path.isfile(file):
+            files.append(file)
+        else:
+            parser.error(f"Unknown file: {file}")
 
     for file in files:
         analyze_data(file, args.denoise)
