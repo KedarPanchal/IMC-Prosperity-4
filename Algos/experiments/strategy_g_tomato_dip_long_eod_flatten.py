@@ -1,3 +1,15 @@
+"""
+Experiment G: Exact opposite of strategy_f — tomatoes long-only on dips, flatten end window.
+
+- Full long capacity when wall mid *drops* sharply (dip: prev_wm - wm >= DIP_WM_DELTA).
+- No sells / no asks before the cover window (no long exit).
+- After TOMATO_COVER_START_MS, aggressively sell to flatten toward flat.
+
+Emeralds: same MM as strategy F / production baseline.
+
+Pair with: strategy_f_tomato_spike_short_eod_flatten.py (short on spike up).
+"""
+
 from datamodel import OrderDepth, TradingState, Order
 from typing import Dict, Optional
 import json
@@ -14,12 +26,9 @@ SKEW_HEAVY = 0.60
 EMERALD_FAIR_VALUE = 10000
 EMERALD_TAKE_EDGE = 1
 
-# Tomato: mean-reversion skew from wall-mid change vs previous tick (traderData).
-MR_WM_DELTA_THRESH = 0.5
-MR_BUY_EDGE = 2
-MR_SELL_EDGE = 0
-MR_BUY_EDGE_SHORT = 0
-MR_SELL_EDGE_SHORT = 2
+# Tomato experiment (mirror of F: spike up -> dip down)
+DIP_WM_DELTA = 2.0
+TOMATO_COVER_START_MS = 190_000
 
 
 def best_bid_ask(od: OrderDepth):
@@ -131,50 +140,79 @@ class Trader:
 
             if product == "TOMATOES":
                 wm = wall_mid(od)
-                buy_edge = 1
-                sell_edge = 1
+                covering = state.timestamp >= TOMATO_COVER_START_MS
 
-                if prev_tom_wm is not None and wm is not None:
-                    d_wm = wm - prev_tom_wm
-                    if d_wm < -MR_WM_DELTA_THRESH:
-                        buy_edge, sell_edge = MR_BUY_EDGE, MR_SELL_EDGE
-                    elif d_wm > MR_WM_DELTA_THRESH:
-                        buy_edge, sell_edge = MR_BUY_EDGE_SHORT, MR_SELL_EDGE_SHORT
+                if covering:
+                    for px in sorted(od.buy_orders, reverse=True):
+                        if max_sell <= 0:
+                            break
+                        qty = min(max_sell, od.buy_orders[px])
+                        if qty > 0:
+                            orders.append(Order(product, px, -qty))
+                            max_sell -= qty
 
-                if pos_frac > SKEW_HEAVY:
-                    buy_edge = 0
-                    sell_edge = 2
-                elif pos_frac > SKEW_LIGHT:
-                    sell_edge = max(sell_edge, 2)
-                elif pos_frac < -SKEW_HEAVY:
-                    buy_edge = 2
-                    sell_edge = 0
-                elif pos_frac < -SKEW_LIGHT:
-                    buy_edge = max(buy_edge, 2)
+                    if pos > 0 and max_sell > 0 and ask > bid:
+                        aggressive_ask = bid + 1
+                        if aggressive_ask > bid:
+                            orders.append(Order(product, aggressive_ask, -max_sell))
 
-                our_bid = bid + buy_edge
-                our_ask = ask - sell_edge
+                    if pos < 0 and max_buy > 0:
+                        for px in sorted(od.sell_orders):
+                            if max_buy <= 0:
+                                break
+                            qty = min(max_buy, -od.sell_orders[px])
+                            if qty > 0:
+                                orders.append(Order(product, px, qty))
+                                max_buy -= qty
+                else:
+                    if pos < 0 and max_buy > 0:
+                        for px in sorted(od.sell_orders):
+                            if max_buy <= 0:
+                                break
+                            qty = min(max_buy, -od.sell_orders[px])
+                            if qty > 0:
+                                orders.append(Order(product, px, qty))
+                                max_buy -= qty
+
+                    dip = (
+                        prev_tom_wm is not None
+                        and wm is not None
+                        and (prev_tom_wm - wm) >= DIP_WM_DELTA
+                    )
+                    if dip:
+                        mb = limit - pos
+                        for px in sorted(od.sell_orders):
+                            if mb <= 0:
+                                break
+                            qty = min(mb, -od.sell_orders[px])
+                            if qty > 0:
+                                orders.append(Order(product, px, qty))
+                                mb -= qty
+                        if mb > 0 and ask is not None:
+                            orders.append(Order(product, ask, mb))
 
                 if wm is not None:
                     trader_state["tom_wm"] = wm
 
-            else:
-                buy_edge = 1
-                sell_edge = 1
+                result[product] = orders
+                continue
 
-                if pos_frac > SKEW_HEAVY:
-                    buy_edge = 0
-                    sell_edge = 2
-                elif pos_frac > SKEW_LIGHT:
-                    sell_edge = 2
-                elif pos_frac < -SKEW_HEAVY:
-                    buy_edge = 2
-                    sell_edge = 0
-                elif pos_frac < -SKEW_LIGHT:
-                    buy_edge = 2
+            buy_edge = 1
+            sell_edge = 1
 
-                our_bid = bid + buy_edge
-                our_ask = ask - sell_edge
+            if pos_frac > SKEW_HEAVY:
+                buy_edge = 0
+                sell_edge = 2
+            elif pos_frac > SKEW_LIGHT:
+                sell_edge = 2
+            elif pos_frac < -SKEW_HEAVY:
+                buy_edge = 2
+                sell_edge = 0
+            elif pos_frac < -SKEW_LIGHT:
+                buy_edge = 2
+
+            our_bid = bid + buy_edge
+            our_ask = ask - sell_edge
 
             if our_ask > our_bid:
                 l1_buy = clamp(int(max_buy * 0.6), 0, max_buy)
