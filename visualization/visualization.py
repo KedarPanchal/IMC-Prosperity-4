@@ -41,7 +41,6 @@ def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
 
 # -- DATA CLASSES -------------------------------------------------------------
 
-@dataclass
 class TradeData:
     def __init__(
             self,
