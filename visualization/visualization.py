@@ -4,7 +4,6 @@ import sys
 import os
 from typing import Any
 from collections import defaultdict
-from dataclasses import dataclass
 import pandas as pd
 import matplotlib.pyplot as plt
 import mplcursors
