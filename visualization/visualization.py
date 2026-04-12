@@ -2,9 +2,13 @@
 
 import sys
 import os
+
 from typing import Any
 from collections import defaultdict
+
 import pandas as pd
+import math
+
 import matplotlib.pyplot as plt
 import mplcursors
 
@@ -26,6 +30,15 @@ def castable(value, to_type):
 def avg(values: list):
     actual = list(filter(lambda v: pd.notna(v) and castable(v, float), values))
     return sum(map(float, actual)) / len(actual) if actual else 0
+
+
+# Stabilizes a list of data using a logarithm
+# The lookback parameter determines whether to compute the log of the value itself or the log of the ratio of the value to the previous value
+def stabilize(data: list[int | float], lookback: bool = False):
+    if lookback:
+        return [math.log(data[i] / data[i - 1]) for i in range(1, len(data))]
+    else:
+        return [math.log(value) for value in data]
 
 
 # Loads a dataframe into a dictionary of lists of objects, keyed by a specified column
