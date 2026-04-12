@@ -8,6 +8,7 @@ from collections import defaultdict
 
 import pandas as pd
 import math
+import statistics
 
 import matplotlib.pyplot as plt
 import mplcursors
@@ -49,34 +50,46 @@ def avg(values: list):
     return sum(map(float, actual)) / len(actual) if actual else 0
 
 
-def stabilize_data(data: list[int | float], lookback: bool = False):
-    """Apply a logarithmic transform to stabilize a numeric series.
+def haar_denoise(data: list[int | float], passes: int = 1):
+    """Apply a simple Haar wavelet transform to denoise a numeric series.
 
     Args:
-        data: Sequence of positive values.
-        lookback: If False, return ``log(x)`` for each ``x``. If True, return
-            ``log(x_i / x_{i-1})`` for ``i = 1 .. len(data)-1`` (one fewer point).
+        data: Sequence of numeric values.
+        passes: The number of times to apply the transform.
 
     Returns:
-        List of log-transformed values.
+        List of denoised values.
     """
-    if lookback:
-        return [math.log(data[i] / data[i - 1]) for i in range(1, len(data))]
-    else:
-        return [math.log(value) for value in data]
+    # Store a list of the detail coefficients for reconstruction
+    cD_list = []
 
+    # Define common lamdas used throughout the denoise
+    pair = lambda li: [(li[i], li[i + 1]) for i in range(0, len(li) - 1, 2)] + ([(li[-1], li[-1])] if len(li) % 2 == 1 else [])
+    flatten = lambda pairs: [x for pair in pairs for x in pair]
 
-def denoise_data(data: list[int | float], denoise: bool):
-    """Optionally apply a logarithmic transform to stabilize a numeric series.
+    # Start with the approximations being the current data
+    cA_list = data
 
-    Args:
-        data: Sequence of positive values.
-        denoise: If True, return stabilized data using ``stabilize_data``; otherwise return the original data.
+    # Compute the coefficients for the specified number of passes
+    for _ in range(passes):
+        # Pair up the current approximation list and pad as needed
+        cA_pairs = pair(cA_list)
+        # Compute each pass's detail coefficients
+        cDs = [(x - y) / math.sqrt(2) for x, y in cA_pairs]
+        # Apply a threshold to transform the detail coefficients
+        threshold = (statistics.median([abs(cD) for cD in cDs]) / 0.67448975) * math.sqrt(2 * math.log(len(cDs)))
+        cDs = [math.copysign(1, cD) * max(abs(cD) - threshold, 0) for cD in cDs]
+        # Store the coefficients for reconstruction
+        cD_list.append(cDs)
+        # Compute the next approximation coefficients
+        cA_list = [(x + y) / math.sqrt(2) for x, y in cA_pairs]
 
-    Returns:
-        List of values, either the original or the stabilized version.
-    """
-    return stabilize_data(data) if denoise else data
+    # Store the final computed approximations as the last layer
+    # Reconstruct the denoised signal
+    for coefficients in reversed(cD_list):
+        cA_list= flatten([((cA + cD) / math.sqrt(2), (cA - cD) / math.sqrt(2)) for cA, cD in zip(cA_list, coefficients)])
+
+    return cA_list
 
 
 def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
@@ -271,7 +284,9 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
         timestamps = [trade.timestamp for trade in trade_list]
 
         # Plot the trade data
-        prices = denoise_data([trade.price for trade in trade_list], denoise)
+        prices = [trade.price for trade in trade_list]
+        if denoise:
+            prices = prices
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -285,7 +300,9 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
             )
 
         # Plot the quantity data
-        quantities = denoise_data([trade.quantity for trade in trade_list], denoise)
+        quantities = [trade.quantity for trade in trade_list]
+        if denoise:
+            quantities = quantities
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
@@ -391,9 +408,13 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         timestamps = [price.timestamp for price in price_list]
 
         # Plot the bid/ask/fair value price data
-        bid_prices = denoise_data([price.bid_price for price in price_list], denoise)
-        ask_prices = denoise_data([price.ask_price for price in price_list], denoise)
-        fair_value_prices = denoise_data([(price.bid_price + price.ask_price) / 2 for price in price_list], denoise)
+        bid_prices = [price.bid_price for price in price_list]
+        ask_prices = [price.ask_price for price in price_list]
+        fair_value_prices = [(price.bid_price + price.ask_price) / 2 for price in price_list]
+        if denoise:
+            bid_prices = haar_denoise(bid_prices, 2)
+            ask_prices = haar_denoise(ask_prices, 2)
+            fair_value_prices = haar_denoise(fair_value_prices, 2)
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -425,8 +446,13 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
             show_legend=True
             )
 
-        # Plot the bid quantity data
+        # Extract the quantity data
         bid_volumes = [price.bid_volume for price in price_list]
+        ask_volumes = [price.ask_volume for price in price_list]
+        if denoise:
+            bid_volumes = haar_denoise(bid_volumes, 2)
+            ask_volumes = haar_denoise(ask_volumes, 2)
+        # Plot the bid quantity data
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
@@ -440,7 +466,6 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
             )
 
         # Plot the ask quantity data
-        ask_volumes = denoise_data([price.ask_volume for price in price_list], denoise)
         plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
@@ -513,11 +538,11 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume{' (denoised)' if denoise else ''}: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume{' (denoised)' if denoise else ''}: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -530,15 +555,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         x, y = sel.target
         symbol, type = sel.artist.get_label().split(' ', 1)
         if type == "bid":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif type == "ask":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if denoise else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
