@@ -1,6 +1,12 @@
 from datamodel import OrderDepth, TradingState, Order
 from typing import List, Dict
 
+# Strategy C: Position-aware take for emergency flattening
+# When heavily inventoried (>50% of limit), take 10000-touch liquidity to flatten.
+# ~300 touch events per session last only 1 tick each — use them as emergency valves.
+# Selling at 10000 gives 0 edge vs fair, so only fire when inventory is dangerous.
+# Expected impact: small positive; prevents worst-case inventory blowouts.
+
 DEFAULT_LIMIT = 50
 POSITION_LIMITS: Dict[str, int] = {
     "EMERALDS": 80,
@@ -13,6 +19,7 @@ SKEW_HEAVY = 0.60
 EMERALD_FAIR_VALUE = 10000
 EMERALD_TAKE_EDGE = 2
 EMERALD_SESSION_END = 180000
+EMERALD_EMERGENCY_FRAC = 0.50
 
 
 def best_bid_ask(od: OrderDepth):
@@ -49,11 +56,21 @@ class Trader:
             pos_frac = pos / limit if limit > 0 else 0
 
             if product == "EMERALDS":
-                buy_take_px = EMERALD_FAIR_VALUE - EMERALD_TAKE_EDGE
-                sell_take_px = EMERALD_FAIR_VALUE + EMERALD_TAKE_EDGE
+                emergency_long  = pos_frac > EMERALD_EMERGENCY_FRAC
+                emergency_short = pos_frac < -EMERALD_EMERGENCY_FRAC
+
+                if emergency_long:
+                    sell_take_threshold = EMERALD_FAIR_VALUE
+                else:
+                    sell_take_threshold = EMERALD_FAIR_VALUE + EMERALD_TAKE_EDGE
+
+                if emergency_short:
+                    buy_take_threshold = EMERALD_FAIR_VALUE
+                else:
+                    buy_take_threshold = EMERALD_FAIR_VALUE - EMERALD_TAKE_EDGE
 
                 for px in sorted(od.sell_orders):
-                    if px > buy_take_px or max_buy <= 0:
+                    if px > buy_take_threshold or max_buy <= 0:
                         break
                     qty = min(max_buy, -od.sell_orders[px])
                     if qty > 0:
@@ -61,7 +78,7 @@ class Trader:
                         max_buy -= qty
 
                 for px in sorted(od.buy_orders, reverse=True):
-                    if px < sell_take_px or max_sell <= 0:
+                    if px < sell_take_threshold or max_sell <= 0:
                         break
                     qty = min(max_sell, od.buy_orders[px])
                     if qty > 0:
@@ -111,7 +128,6 @@ class Trader:
                 result[product] = orders
                 continue
 
-            # ── Generic book-relative MM for all other products ──
             buy_edge  = 1
             sell_edge = 1
 

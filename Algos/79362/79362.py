@@ -12,6 +12,14 @@ SKEW_HEAVY = 0.60
 
 EMERALD_FAIR_VALUE = 10000
 EMERALD_TAKE_EDGE = 2
+
+# (offset_from_fair, allocation_fraction) — last level absorbs rounding remainder
+EMERALD_LADDER = [
+    (4, 0.30),   # 9996 / 10004
+    (6, 0.40),   # 9994 / 10006
+    (8, 0.30),   # 9992 / 10008
+]
+
 EMERALD_SESSION_END = 180000
 
 
@@ -68,45 +76,44 @@ class Trader:
                         orders.append(Order(product, px, -qty))
                         max_sell -= qty
 
-                bid_offset = 7
-                ask_offset = 7
-
+                skew = 0
                 if state.timestamp >= EMERALD_SESSION_END:
                     if pos > 0:
-                        bid_offset = 9
-                        ask_offset = 4
+                        skew = -3
                     elif pos < 0:
-                        bid_offset = 4
-                        ask_offset = 9
+                        skew = 3
                 elif pos_frac > SKEW_HEAVY:
-                    bid_offset = 8
-                    ask_offset = 6
+                    skew = -2
                 elif pos_frac > SKEW_LIGHT:
-                    ask_offset = 6
+                    skew = -1
                 elif pos_frac < -SKEW_HEAVY:
-                    bid_offset = 6
-                    ask_offset = 8
+                    skew = 2
                 elif pos_frac < -SKEW_LIGHT:
-                    bid_offset = 6
+                    skew = 1
 
-                l1_bid = EMERALD_FAIR_VALUE - bid_offset
-                l1_ask = EMERALD_FAIR_VALUE + ask_offset
+                total_buy = max_buy
+                total_sell = max_sell
 
-                if l1_ask > l1_bid:
-                    l1_buy  = clamp(int(max_buy * 0.6), 0, max_buy)
-                    l1_sell = clamp(int(max_sell * 0.6), 0, max_sell)
+                for i, (offset, alloc) in enumerate(EMERALD_LADDER):
+                    bid_px = EMERALD_FAIR_VALUE - offset + skew
+                    ask_px = EMERALD_FAIR_VALUE + offset + skew
 
-                    if l1_buy > 0:
-                        orders.append(Order(product, l1_bid, l1_buy))
-                        max_buy -= l1_buy
-                    if l1_sell > 0:
-                        orders.append(Order(product, l1_ask, -l1_sell))
-                        max_sell -= l1_sell
+                    if ask_px <= bid_px:
+                        continue
 
-                    if max_buy > 0:
-                        orders.append(Order(product, l1_bid - 1, max_buy))
-                    if max_sell > 0:
-                        orders.append(Order(product, l1_ask + 1, -max_sell))
+                    if i == len(EMERALD_LADDER) - 1:
+                        buy_qty = max_buy
+                        sell_qty = max_sell
+                    else:
+                        buy_qty = clamp(int(total_buy * alloc), 0, max_buy)
+                        sell_qty = clamp(int(total_sell * alloc), 0, max_sell)
+
+                    if buy_qty > 0:
+                        orders.append(Order(product, bid_px, buy_qty))
+                        max_buy -= buy_qty
+                    if sell_qty > 0:
+                        orders.append(Order(product, ask_px, -sell_qty))
+                        max_sell -= sell_qty
 
                 result[product] = orders
                 continue

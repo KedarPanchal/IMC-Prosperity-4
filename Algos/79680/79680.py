@@ -1,6 +1,13 @@
 from datamodel import OrderDepth, TradingState, Order
 from typing import List, Dict
 
+# Strategy E: Probe offset 8 at L1
+# Quote at 9992/10008 (AT the NPC book) instead of 9993/10007 (inside it).
+# If the sim still gives us ~29 fills, we gain +1 tick per fill = ~14% more PnL.
+# HIGH RISK: if NPC orders have queue priority at 9992/10008, we lose most fills.
+# Test in a throwaway submission first.
+# Expected impact: +147 if fills hold, catastrophic if fills drop to near-zero.
+
 DEFAULT_LIMIT = 50
 POSITION_LIMITS: Dict[str, int] = {
     "EMERALDS": 80,
@@ -68,26 +75,26 @@ class Trader:
                         orders.append(Order(product, px, -qty))
                         max_sell -= qty
 
-                bid_offset = 7
-                ask_offset = 7
+                bid_offset = 8
+                ask_offset = 8
 
                 if state.timestamp >= EMERALD_SESSION_END:
                     if pos > 0:
-                        bid_offset = 9
-                        ask_offset = 4
+                        bid_offset = 10
+                        ask_offset = 5
                     elif pos < 0:
-                        bid_offset = 4
-                        ask_offset = 9
+                        bid_offset = 5
+                        ask_offset = 10
                 elif pos_frac > SKEW_HEAVY:
-                    bid_offset = 8
-                    ask_offset = 6
+                    bid_offset = 9
+                    ask_offset = 7
                 elif pos_frac > SKEW_LIGHT:
-                    ask_offset = 6
+                    ask_offset = 7
                 elif pos_frac < -SKEW_HEAVY:
-                    bid_offset = 6
-                    ask_offset = 8
+                    bid_offset = 7
+                    ask_offset = 9
                 elif pos_frac < -SKEW_LIGHT:
-                    bid_offset = 6
+                    bid_offset = 7
 
                 l1_bid = EMERALD_FAIR_VALUE - bid_offset
                 l1_ask = EMERALD_FAIR_VALUE + ask_offset
@@ -111,7 +118,6 @@ class Trader:
                 result[product] = orders
                 continue
 
-            # ── Generic book-relative MM for all other products ──
             buy_edge  = 1
             sell_edge = 1
 

@@ -1,5 +1,12 @@
 from datamodel import OrderDepth, TradingState, Order
 from typing import List, Dict
+import json
+
+# Strategy D: Asymmetric offset with stateful fill tracking
+# After a buy fill, sellers may be clustering — widen bid for 2 ticks to
+# avoid stacking more long inventory. Uses traderData to persist state
+# (last known position) between run() calls to detect fills.
+# Expected impact: uncertain; experimental.
 
 DEFAULT_LIMIT = 50
 POSITION_LIMITS: Dict[str, int] = {
@@ -13,6 +20,7 @@ SKEW_HEAVY = 0.60
 EMERALD_FAIR_VALUE = 10000
 EMERALD_TAKE_EDGE = 2
 EMERALD_SESSION_END = 180000
+COOLDOWN_TICKS = 200
 
 
 def best_bid_ask(od: OrderDepth):
@@ -32,6 +40,16 @@ class Trader:
     def run(self, state: TradingState):
 
         result = {}
+        trader_state = {}
+        if state.traderData:
+            try:
+                trader_state = json.loads(state.traderData)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        prev_em_pos = trader_state.get("em_pos", 0)
+        last_buy_ts = trader_state.get("last_buy_ts", -99999)
+        last_sell_ts = trader_state.get("last_sell_ts", -99999)
 
         for product in state.order_depths:
             od  = state.order_depths[product]
@@ -49,6 +67,12 @@ class Trader:
             pos_frac = pos / limit if limit > 0 else 0
 
             if product == "EMERALDS":
+                em_delta = pos - prev_em_pos
+                if em_delta > 0:
+                    last_buy_ts = state.timestamp
+                elif em_delta < 0:
+                    last_sell_ts = state.timestamp
+
                 buy_take_px = EMERALD_FAIR_VALUE - EMERALD_TAKE_EDGE
                 sell_take_px = EMERALD_FAIR_VALUE + EMERALD_TAKE_EDGE
 
@@ -71,6 +95,9 @@ class Trader:
                 bid_offset = 7
                 ask_offset = 7
 
+                recent_buy  = (state.timestamp - last_buy_ts) <= COOLDOWN_TICKS
+                recent_sell = (state.timestamp - last_sell_ts) <= COOLDOWN_TICKS
+
                 if state.timestamp >= EMERALD_SESSION_END:
                     if pos > 0:
                         bid_offset = 9
@@ -88,6 +115,11 @@ class Trader:
                     ask_offset = 8
                 elif pos_frac < -SKEW_LIGHT:
                     bid_offset = 6
+
+                if recent_buy and not recent_sell:
+                    bid_offset = max(bid_offset, 8)
+                elif recent_sell and not recent_buy:
+                    ask_offset = max(ask_offset, 8)
 
                 l1_bid = EMERALD_FAIR_VALUE - bid_offset
                 l1_ask = EMERALD_FAIR_VALUE + ask_offset
@@ -108,10 +140,13 @@ class Trader:
                     if max_sell > 0:
                         orders.append(Order(product, l1_ask + 1, -max_sell))
 
+                trader_state["em_pos"] = pos
+                trader_state["last_buy_ts"] = last_buy_ts
+                trader_state["last_sell_ts"] = last_sell_ts
+
                 result[product] = orders
                 continue
 
-            # ── Generic book-relative MM for all other products ──
             buy_edge  = 1
             sell_edge = 1
 
@@ -146,4 +181,4 @@ class Trader:
 
             result[product] = orders
 
-        return result, 0, ""
+        return result, 0, json.dumps(trader_state)

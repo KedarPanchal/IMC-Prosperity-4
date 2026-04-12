@@ -1,6 +1,12 @@
 from datamodel import OrderDepth, TradingState, Order
 from typing import List, Dict
 
+# Strategy A: All-in at L1
+# Remove L2 dead weight — put 100% of capacity at offset 7 (9993/10007).
+# L2 at 9992/10008 never fills because it competes with NPC liquidity and
+# incoming fill sizes (~5.5) never exhaust L1 capacity (~48 units).
+# Expected impact: ~0 (confirms L2 is dead weight), but cleaner order book.
+
 DEFAULT_LIMIT = 50
 POSITION_LIMITS: Dict[str, int] = {
     "EMERALDS": 80,
@@ -93,25 +99,14 @@ class Trader:
                 l1_ask = EMERALD_FAIR_VALUE + ask_offset
 
                 if l1_ask > l1_bid:
-                    l1_buy  = clamp(int(max_buy * 0.6), 0, max_buy)
-                    l1_sell = clamp(int(max_sell * 0.6), 0, max_sell)
-
-                    if l1_buy > 0:
-                        orders.append(Order(product, l1_bid, l1_buy))
-                        max_buy -= l1_buy
-                    if l1_sell > 0:
-                        orders.append(Order(product, l1_ask, -l1_sell))
-                        max_sell -= l1_sell
-
                     if max_buy > 0:
-                        orders.append(Order(product, l1_bid - 1, max_buy))
+                        orders.append(Order(product, l1_bid, max_buy))
                     if max_sell > 0:
-                        orders.append(Order(product, l1_ask + 1, -max_sell))
+                        orders.append(Order(product, l1_ask, -max_sell))
 
                 result[product] = orders
                 continue
 
-            # ── Generic book-relative MM for all other products ──
             buy_edge  = 1
             sell_edge = 1
 

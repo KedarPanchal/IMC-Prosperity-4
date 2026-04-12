@@ -1,6 +1,12 @@
 from datamodel import OrderDepth, TradingState, Order
 from typing import List, Dict
 
+# Strategy B: Tune end-of-session flattening window
+# Start flattening at 150000 (last 25%) instead of 180000 (last 10%).
+# More time to close round-trips, reducing ending inventory from -10/-16 toward 0.
+# Closing at +4 edge is better than leaving a half-trip open (+0 unrealized).
+# Expected impact: +30 to +80 points from reduced ending inventory.
+
 DEFAULT_LIMIT = 50
 POSITION_LIMITS: Dict[str, int] = {
     "EMERALDS": 80,
@@ -12,7 +18,8 @@ SKEW_HEAVY = 0.60
 
 EMERALD_FAIR_VALUE = 10000
 EMERALD_TAKE_EDGE = 2
-EMERALD_SESSION_END = 180000
+EMERALD_FLATTEN_START = 150000
+EMERALD_FLATTEN_URGENT = 180000
 
 
 def best_bid_ask(od: OrderDepth):
@@ -71,12 +78,19 @@ class Trader:
                 bid_offset = 7
                 ask_offset = 7
 
-                if state.timestamp >= EMERALD_SESSION_END:
+                if state.timestamp >= EMERALD_FLATTEN_URGENT:
+                    if pos > 0:
+                        bid_offset = 10
+                        ask_offset = 3
+                    elif pos < 0:
+                        bid_offset = 3
+                        ask_offset = 10
+                elif state.timestamp >= EMERALD_FLATTEN_START:
                     if pos > 0:
                         bid_offset = 9
-                        ask_offset = 4
+                        ask_offset = 5
                     elif pos < 0:
-                        bid_offset = 4
+                        bid_offset = 5
                         ask_offset = 9
                 elif pos_frac > SKEW_HEAVY:
                     bid_offset = 8
@@ -111,7 +125,6 @@ class Trader:
                 result[product] = orders
                 continue
 
-            # ── Generic book-relative MM for all other products ──
             buy_edge  = 1
             sell_edge = 1
 
