@@ -4,7 +4,7 @@ import argparse
 import sys
 import os
 
-from typing import Any
+from typing import Any, Callable
 from collections import defaultdict
 
 import pandas as pd
@@ -13,6 +13,83 @@ import statistics
 
 import matplotlib.pyplot as plt
 import mplcursors
+
+
+# -- FOURIER TRANSFORM DENOISING ----------------------------------------------
+
+def identity_denoise(passes: int = 1):
+    """Return a function that performs no denoising and returns the input data as-is.
+
+    Args:
+        passes: Ignored; included for interface consistency with other denoising functions.
+
+    Returns:
+        A function that takes a list of numeric values and returns the same list unchanged.
+    """
+    def identity(data: list[int | float]):
+        """Return the input data as-is without any denoising.
+
+        Args:
+            data: Sequence of numeric values.
+
+        Returns:
+            The same list of values unchanged.
+        """
+        return data
+
+    return identity
+
+
+def haar_denoise(passes: int = 1):
+    """Return a function that applies a simple Haar wavelet transform to denoise a numeric series.
+
+    Args:
+        passes: The number of times to apply the Haar transform; more passes result in stronger denoising.
+
+    Returns:
+        A function that takes a list of numeric values and returns a denoised list of the same length.
+    """
+    def haar(data: list[int | float]):
+        """Apply a simple Haar wavelet transform to denoise a numeric series.
+
+        Args:
+            data: Sequence of numeric values.
+
+        Returns:
+            List of denoised values.
+        """
+        # Store a list of the detail coefficients for reconstruction
+        cD_list = []
+
+        # Define common lamdas used throughout the denoise
+        pair = lambda li: [(li[i], li[i + 1]) for i in range(0, len(li) - 1, 2)] + ([(li[-1], li[-1])] if len(li) % 2 == 1 else [])
+        flatten = lambda pairs: [x for pair in pairs for x in pair]
+
+        # Start with the approximations being the current data
+        cA_list = data
+
+        # Compute the coefficients for the specified number of passes
+        for _ in range(passes):
+            # Pair up the current approximation list and pad as needed
+            cA_pairs = pair(cA_list)
+            # Compute each pass's detail coefficients
+            cDs = [(x - y) / math.sqrt(2) for x, y in cA_pairs]
+            # Apply a threshold to transform the detail coefficients
+            threshold = (statistics.median([abs(cD) for cD in cDs]) / 0.67448975) * math.sqrt(2 * math.log(len(cDs)))
+            cDs = [math.copysign(1, cD) * max(abs(cD) - threshold, 0) for cD in cDs]
+            # Store the coefficients for reconstruction
+            cD_list.append(cDs)
+            # Compute the next approximation coefficients
+            cA_list = [(x + y) / math.sqrt(2) for x, y in cA_pairs]
+
+        # Store the final computed approximations as the last layer
+        # Reconstruct the denoised signal
+        for coefficients in reversed(cD_list):
+            cA_list= flatten([((cA + cD) / math.sqrt(2), (cA - cD) / math.sqrt(2)) for cA, cD in zip(cA_list, coefficients)])
+
+        return cA_list
+
+    return haar
 
 
 # -- HELPER FUNCTIONS ---------------------------------------------------------
@@ -49,48 +126,6 @@ def avg(values: list):
     """
     actual = list(filter(lambda v: pd.notna(v) and castable(v, float), values))
     return sum(map(float, actual)) / len(actual) if actual else 0
-
-
-def haar_denoise(data: list[int | float], passes: int = 1):
-    """Apply a simple Haar wavelet transform to denoise a numeric series.
-
-    Args:
-        data: Sequence of numeric values.
-        passes: The number of times to apply the transform.
-
-    Returns:
-        List of denoised values.
-    """
-    # Store a list of the detail coefficients for reconstruction
-    cD_list = []
-
-    # Define common lamdas used throughout the denoise
-    pair = lambda li: [(li[i], li[i + 1]) for i in range(0, len(li) - 1, 2)] + ([(li[-1], li[-1])] if len(li) % 2 == 1 else [])
-    flatten = lambda pairs: [x for pair in pairs for x in pair]
-
-    # Start with the approximations being the current data
-    cA_list = data
-
-    # Compute the coefficients for the specified number of passes
-    for _ in range(passes):
-        # Pair up the current approximation list and pad as needed
-        cA_pairs = pair(cA_list)
-        # Compute each pass's detail coefficients
-        cDs = [(x - y) / math.sqrt(2) for x, y in cA_pairs]
-        # Apply a threshold to transform the detail coefficients
-        threshold = (statistics.median([abs(cD) for cD in cDs]) / 0.67448975) * math.sqrt(2 * math.log(len(cDs)))
-        cDs = [math.copysign(1, cD) * max(abs(cD) - threshold, 0) for cD in cDs]
-        # Store the coefficients for reconstruction
-        cD_list.append(cDs)
-        # Compute the next approximation coefficients
-        cA_list = [(x + y) / math.sqrt(2) for x, y in cA_pairs]
-
-    # Store the final computed approximations as the last layer
-    # Reconstruct the denoised signal
-    for coefficients in reversed(cD_list):
-        cA_list= flatten([((cA + cD) / math.sqrt(2), (cA - cD) / math.sqrt(2)) for cA, cD in zip(cA_list, coefficients)])
-
-    return cA_list
 
 
 def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
@@ -195,6 +230,18 @@ def plot_data(
         axis.legend()
 
 
+def not_identity(callback: Callable[[list[int | float]], list[int | float]]):
+    """Return whether the provided callback is not the identity denoising function.
+
+    Args:
+        callback: Denoising function to check.
+
+    Returns:
+        True if the callback is not the identity function; False if it is.
+    """
+    return callback.__qualname__ != identity_denoise(1).__qualname__
+
+
 # -- DATA CLASSES -------------------------------------------------------------
 
 class TradeData:
@@ -244,9 +291,17 @@ class PriceData:
         return self.timestamp < other.timestamp
 
 
+# -- TOP-LEVEL CONSTANTS ------------------------------------------------------
+
+DENOISING_STRATEGIES = {
+    "identity": identity_denoise,
+    "haar": haar_denoise
+}
+
+
 # -- ANALYSIS FUNCTIONS -------------------------------------------------------
 
-def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
+def analyze_trade_data(data: pd.DataFrame, filename: str, denoise_callback: Callable[[list[int | float]], list[int | float]]):
     """Plot per-symbol trade price and quantity, plus a combined price view.
 
     Expects trade rows loadable as ``TradeData`` (grouped by ``symbol``).
@@ -285,9 +340,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
         timestamps = [trade.timestamp for trade in trade_list]
 
         # Plot the trade data
-        prices = [trade.price for trade in trade_list]
-        if denoise:
-            prices = prices
+        prices = denoise_callback([trade.price for trade in trade_list])
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -301,9 +354,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
             )
 
         # Plot the quantity data
-        quantities = [trade.quantity for trade in trade_list]
-        if denoise:
-            quantities = quantities
+        quantities = denoise_callback([trade.quantity for trade in trade_list])
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
@@ -333,7 +384,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     def on_add_price(sel):
         """Annotate hover selection on a price subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nPrice{' (denoised)' if denoise else ''}: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nPrice{' (denoised)' if not_identity(denoise_callback) else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
@@ -344,7 +395,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     def on_add_quantity(sel):
         """Annotate hover selection on a quantity subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nQuantity{' (denoised)' if denoise else ''}: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nQuantity{' (denoised)' if not_identity(denoise_callback) else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -355,7 +406,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     def on_add_master(sel):
         """Annotate hover selection on the combined master axis."""
         x, y = sel.target
-        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice{' (denoised)' if denoise else ''}: {y}")
+        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice{' (denoised)' if not_identity(denoise_callback) else ''}: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -365,7 +416,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str, denoise: bool):
     plt.show()
 
 
-def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
+def analyze_price_data(data: pd.DataFrame, filename: str, denoise_callback: Callable[[list[int | float]], list[int | float]]):
     """Plot per-product bid/ask/fair price and volumes, plus combined price series.
 
     Expects rows loadable as ``PriceData`` (grouped by ``product``).
@@ -409,13 +460,9 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         timestamps = [price.timestamp for price in price_list]
 
         # Plot the bid/ask/fair value price data
-        bid_prices = [price.bid_price for price in price_list]
-        ask_prices = [price.ask_price for price in price_list]
-        fair_value_prices = [(price.bid_price + price.ask_price) / 2 for price in price_list]
-        if denoise:
-            bid_prices = haar_denoise(bid_prices, 2)
-            ask_prices = haar_denoise(ask_prices, 2)
-            fair_value_prices = haar_denoise(fair_value_prices, 2)
+        bid_prices = denoise_callback([price.bid_price for price in price_list])
+        ask_prices = denoise_callback([price.ask_price for price in price_list])
+        fair_value_prices = denoise_callback([(price.bid_price + price.ask_price) / 2 for price in price_list])
         plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -447,13 +494,8 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
             show_legend=True
             )
 
-        # Extract the quantity data
-        bid_volumes = [price.bid_volume for price in price_list]
-        ask_volumes = [price.ask_volume for price in price_list]
-        if denoise:
-            bid_volumes = haar_denoise(bid_volumes, 2)
-            ask_volumes = haar_denoise(ask_volumes, 2)
         # Plot the bid quantity data
+        bid_volumes = denoise_callback([price.bid_volume for price in price_list])
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
@@ -467,6 +509,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
             )
 
         # Plot the ask quantity data
+        ask_volumes = denoise_callback([price.ask_volume for price in price_list])
         plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
@@ -518,15 +561,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif label == "ask":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value{' (denoised)' if denoise else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -539,11 +582,11 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume{' (denoised)' if denoise else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume{' (denoised)' if not_identity(denoise_callback) else ''}: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume{' (denoised)' if denoise else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume{' (denoised)' if not_identity(denoise_callback) else ''}: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -556,15 +599,15 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
         x, y = sel.target
         symbol, type = sel.artist.get_label().split(' ', 1)
         if type == "bid":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif type == "ask":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if denoise else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if denoise else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if not_identity(denoise_callback) else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -574,19 +617,26 @@ def analyze_price_data(data: pd.DataFrame, filename: str, denoise: bool):
     plt.show()
 
 
-def analyze_data(file_path: str, denoise: bool):
+def analyze_data(file_path: str, strategy: str, passes: int):
     """Load a semicolon-separated CSV and dispatch to trade or price visualization.
 
     Chooses ``analyze_trade_data`` if a ``buyer`` column exists,
     ``analyze_price_data`` if ``profit_and_loss`` exists; otherwise prints a notice.
+    Applies the appropriate denoising strategy if specified.
 
     Args:
         file_path: Path to the CSV file.
+        strategy: The name of the denoising strategy to utilize
+        passes: The number of denoising passes to make
 
     Returns:
         None.
     """
+    # Read the pandas data
     data = pd.read_csv(file_path, sep=";")
+
+    # Determine the appropriate denoising function based on the strategy argument
+    denoise = DENOISING_STRATEGIES[strategy](passes)
 
     if "buyer" in data.columns:
         analyze_trade_data(data, os.path.basename(file_path), denoise)
@@ -605,16 +655,20 @@ def main():
     parser.add_argument("default_files", nargs="+", help="Paths to CSV files for analysis")
     parser.add_argument("--files", "-f", dest="files", nargs="*", help="Paths to CSV files for analysis explicitly specified with --files")
     parser.add_argument("--denoise", "-d", dest="denoise", action="store_true", help="Denoise the data before plotting")
-    parser.add_argument("--strategy", "-s", dest="strategy", choices=["haar"], default="haar", help="Which Fourier transform to utilize when denoising the data")
+    parser.add_argument("--strategy", "-s", dest="strategy", choices=list(DENOISING_STRATEGIES.keys()), default="identity", help="Which Fourier transform to utilize when denoising the data")
     parser.add_argument("--passes", "-p", dest="passes", type=int, default=2, help="The number of passes to perform the Fourier transform for")
 
     args = parser.parse_args()
+    # Can only pass --strength and --passes if --denoise is an argument
     denoise_args = [arg for arg in ["--strategy", "-s", "--passes", "-p"] if arg in sys.argv]
     if denoise_args and not args.denoise:
         parser.error(f"{' '.join(denoise_args)} cannot be specified if --denoise isn't passed")
+    # Parsing files must be passed
     to_parse = args.files + args.default_files if args.files and args.default_files else args.files or args.default_files
     if not to_parse:
         parser.error("No files to parse")
+    # If denoising, default strategy is haar
+    denoise_strategy = "haar" if args.denoise and ("--strategy" not in sys.argv and "-s" not in sys.argv) else args.strategy
 
     files = []
     for file in to_parse:
@@ -624,7 +678,7 @@ def main():
             parser.error(f"Unknown file: {file}")
 
     for file in files:
-        analyze_data(file, args.denoise)
+        analyze_data(file, denoise_strategy, args.passes)
 
 
 if __name__ == "__main__":
