@@ -12,22 +12,12 @@ SKEW_HEAVY = 0.60
 
 EMERALD_FAIR_VALUE = 10000
 EMERALD_TAKE_EDGE = 1
-EMERALD_SESSION_END = 180000
-EMERALD_FLATTEN_THRESHOLD = 30
 
 
 def best_bid_ask(od: OrderDepth):
     bb = max(od.buy_orders.keys())  if od.buy_orders  else None
     ba = min(od.sell_orders.keys()) if od.sell_orders else None
     return bb, ba
-
-def wall_mid(od: OrderDepth):
-    """Fair value estimate: average of highest-volume bid and ask levels."""
-    if not od.buy_orders or not od.sell_orders:
-        return None
-    bid_wall = max(od.buy_orders, key=lambda p: od.buy_orders[p])
-    ask_wall = max(od.sell_orders, key=lambda p: abs(od.sell_orders[p]))
-    return (bid_wall + ask_wall) / 2
 
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
@@ -78,37 +68,10 @@ class Trader:
                         orders.append(Order(product, px, -qty))
                         max_sell -= qty
 
-                need_flatten = (abs(pos) > EMERALD_FLATTEN_THRESHOLD or
-                                state.timestamp >= EMERALD_SESSION_END)
-
-                if need_flatten and pos > 0:
-                    for px in sorted(od.buy_orders, reverse=True):
-                        if px < EMERALD_FAIR_VALUE or max_sell <= 0:
-                            break
-                        fqty = min(max_sell, od.buy_orders[px], pos)
-                        if fqty > 0:
-                            orders.append(Order(product, px, -fqty))
-                            max_sell -= fqty
-                elif need_flatten and pos < 0:
-                    for px in sorted(od.sell_orders):
-                        if px > EMERALD_FAIR_VALUE or max_buy <= 0:
-                            break
-                        fqty = min(max_buy, -od.sell_orders[px], -pos)
-                        if fqty > 0:
-                            orders.append(Order(product, px, fqty))
-                            max_buy -= fqty
-
                 bid_offset = 7
                 ask_offset = 7
 
-                if state.timestamp >= EMERALD_SESSION_END:
-                    if pos > 0:
-                        bid_offset = 9
-                        ask_offset = 4
-                    elif pos < 0:
-                        bid_offset = 4
-                        ask_offset = 9
-                elif pos_frac > SKEW_HEAVY:
+                if pos_frac > SKEW_HEAVY:
                     bid_offset = 8
                     ask_offset = 6
                 elif pos_frac > SKEW_LIGHT:
