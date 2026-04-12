@@ -63,7 +63,8 @@ def plot_data(
         data: list[int | float],
         data_label: str,
         data_color: str,
-        artists: list
+        artists: list,
+        show_legend: bool = False
         ):
     formatter = lambda v, _: f"{int(v)}"
 
@@ -81,6 +82,8 @@ def plot_data(
             )
         )
     axis.tick_params(axis="y", labelcolor=axis_color)
+    if show_legend:
+        axis.legend()
 
 
 # -- DATA CLASSES -------------------------------------------------------------
@@ -155,7 +158,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
             prices,
             "Price",
             "green",
-            price_artists
+            price_artists,
             )
 
         # Plot the quantity data
@@ -169,7 +172,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
             quantities,
             "Quantity",
             "blue",
-            quantity_artists
+            quantity_artists,
             )
 
         # Plot the price on the master plot
@@ -231,7 +234,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
-    _, axes, main_formatter, ax_master = make_plots(f"Price Data Analysis for {filename}", 4, len(prices.items()))
+    _, axes, ax_master = make_plots(f"Price Data Analysis for {filename}", 4, len(prices.items()))
 
     # Create arrays to store each artist for rendering the cursors
     bid_price_artists = []
@@ -251,76 +254,73 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
         timestamps = [price.timestamp for price in price_list]
 
         # Plot the bid/ask price data
-        axes[0, plot].tick_params(axis="y", labelcolor="green")  # type: ignore
-        axes[0, plot].xaxis.set_major_formatter(main_formatter)  # type: ignore
-        axes[0, plot].yaxis.set_major_formatter(main_formatter)  # type: ignore
-        axes[0, plot].set_ylabel("Bid/Ask Price", color="green")  # type: ignore
         bid_prices = [price.bid_price for price in price_list]
         ask_prices = [price.ask_price for price in price_list]
         fair_value_prices = [(bid + ask) / 2 for bid, ask in zip(bid_prices, ask_prices)]
-        bid_price_artists.extend(
-                axes[0, plot].plot(  # type: ignore
-                    timestamps,
-                    bid_prices,
-                    linewidth=0.8,
-                    label="bid",
-                    color="green"
-                )
+        plot_data(
+            axes[0, plot],  # type: ignore
+            "green",
+            "Bid/Ask Price",
+            "green",
+            timestamps,
+            bid_prices,
+            "bid",
+            "green",
+            bid_price_artists,
+            show_legend=True
             )
-        ask_price_artists.extend(
-                axes[0, plot].plot(  # type: ignore
-                    timestamps,
-                    ask_prices,
-                    linewidth=0.8,
-                    label="ask",
-                    color="red"
-                )
+        plot_data(
+            axes[0, plot],  # type: ignore
+            "green",
+            "Bid/Ask Price",
+            "green",
+            timestamps,
+            ask_prices,
+            "ask",
+            "red",
+            ask_price_artists,
+            show_legend=True
             )
-        fair_value_artists.extend(
-                axes[0, plot].plot(  # type: ignore
-                    timestamps,
-                    fair_value_prices,
-                    linewidth=0.8,
-                    label="fair value",
-                    color="blue"
-                )
+        plot_data(
+            axes[0, plot],  # type: ignore
+            "green",
+            "Bid/Ask Price",
+            "green",
+            timestamps,
+            fair_value_prices,
+            "fair value",
+            "blue",
+            fair_value_artists,
+            show_legend=True
             )
-        axes[0, plot].tick_params(axis="y", labelcolor="green")  # type: ignore
-        axes[0, plot].legend()  # type: ignore
 
         # Plot the bid quantity data
-        axes[1, plot].xaxis.set_major_formatter(main_formatter)  # type: ignore
-        axes[1, plot].yaxis.set_major_formatter(main_formatter)  # type: ignore
-        axes[1, plot].set_ylabel("Bid Volume", color="blue")  # type: ignore
         bid_volumes = [price.bid_volume for price in price_list]
-        bid_quantity_artists.extend(
-                axes[1, plot].plot(  # type: ignore
-                    timestamps,
-                    bid_volumes,
-                    linewidth=0.8,
-                    label="bid",
-                    color="blue",
-                    picker=8
-                )
+        plot_data(
+            axes[1, plot],  # type: ignore
+            "blue",
+            "Bid Volume",
+            "blue",
+            timestamps,
+            bid_volumes,
+            "bid",
+            "blue",
+            bid_quantity_artists
             )
-        axes[1, plot].tick_params(axis="y", labelcolor="blue")  # type: ignore
 
         # Plot the ask quantity data
-        axes[2, plot].xaxis.set_major_formatter(main_formatter)  # type: ignore
-        axes[2, plot].yaxis.set_major_formatter(main_formatter)  # type: ignore
-        axes[2, plot].set_ylabel("Ask Volume", color="orange")  # type: ignore
         ask_volumes = [price.ask_volume for price in price_list]
-        ask_quantity_artists.extend(
-                axes[2, plot].plot(  # type: ignore
-                    timestamps,
-                    ask_volumes,
-                    linewidth=0.8,
-                    label="ask",
-                    color="orange",
-                    picker=8
-                )
+        plot_data(
+            axes[2, plot],  # type: ignore
+            "orange",
+            "Ask Volume",
+            "orange",
+            timestamps,
+            ask_volumes,
+            "ask",
+            "orange",
+            ask_quantity_artists
             )
-        axes[2, plot].tick_params(axis="y", labelcolor="orange")  # type: ignore
 
         # Plot the bid/ask price on the master plot
         bid_master_artists.extend(
