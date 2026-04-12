@@ -15,8 +15,16 @@ import mplcursors
 
 # -- HELPER FUNCTIONS ---------------------------------------------------------
 
-# Checks if a value can be cast to a given type
 def castable(value, to_type):
+    """Return whether ``value`` can be converted with ``to_type`` without error.
+
+    Args:
+        value: Value to convert.
+        to_type: Callable used like ``to_type(value)`` (e.g. ``float``, ``int``).
+
+    Returns:
+        True if conversion succeeds; False if ``ValueError`` or ``TypeError`` is raised.
+    """
     try:
         to_type(value)
         return True
@@ -26,36 +34,75 @@ def castable(value, to_type):
         return False
 
 
-# Averages a list of values, ignoring any that are not castable to float or are NaN
 def avg(values: list):
+    """Compute the mean of values that are finite and castable to float.
+
+    Entries that are NaN or not castable to ``float`` are omitted.
+
+    Args:
+        values: Iterable of values to average.
+
+    Returns:
+        Arithmetic mean of the kept values, or ``0`` if none qualify.
+    """
     actual = list(filter(lambda v: pd.notna(v) and castable(v, float), values))
     return sum(map(float, actual)) / len(actual) if actual else 0
 
 
-# Stabilizes a list of data using a logarithm
-# The lookback parameter determines whether to compute the log of the value itself or the log of the ratio of the value to the previous value
 def stabilize(data: list[int | float], lookback: bool = False):
+    """Apply a logarithmic transform to stabilize a numeric series.
+
+    Args:
+        data: Sequence of positive values.
+        lookback: If False, return ``log(x)`` for each ``x``. If True, return
+            ``log(x_i / x_{i-1})`` for ``i = 1 .. len(data)-1`` (one fewer point).
+
+    Returns:
+        List of log-transformed values.
+    """
     if lookback:
         return [math.log(data[i] / data[i - 1]) for i in range(1, len(data))]
     else:
         return [math.log(value) for value in data]
 
 
-# Loads a dataframe into a dictionary of lists of objects, keyed by a specified column
 def load_object(obj: type, data: pd.DataFrame, dict: dict[Any, list], key: str):
-    # Create the object for each row and add it to the dictionary
+    """Build ``obj`` instances from dataframe rows and group them by a column key.
+
+    Each row is passed to ``obj`` as keyword arguments. After loading, each list
+    is sorted by a ``timestamp`` attribute.
+
+    Args:
+        obj: Class to instantiate for each row (must accept row fields as kwargs).
+        data: Source table.
+        dict: Mapping from ``row[key]`` to lists of instances; updated in place.
+        key: Column name whose values are the grouping keys.
+
+    Returns:
+        None.
+    """
     for _, row in data.iterrows():
-        # Assume obj takes in kwargs
         dict[row[key]].append(obj(**row.to_dict()))  # type: ignore
 
-    # Sort each list of objects by timestamp
     for obj_list in dict.values():
         obj_list.sort()
 
 
-# Creates a grid of subplots with a shared x-axis
-# Also creates a master subplot on the bottom row for all items
 def make_plots(title: str, rows: int, cols: int):
+    """Create a subplot grid and a full-width bottom axis for combined series.
+
+    The last row of the grid is removed and replaced by ``axes_master``, which spans
+    the figure width for overlaying all items.
+
+    Args:
+        title: Figure suptitle.
+        rows: Number of subplot rows requested before the bottom strip is repurposed.
+        cols: Number of columns.
+
+    Returns:
+        ``(fig, axes, axes_master)`` where ``axes`` is the remaining grid (without
+        the bottom row) and ``axes_master`` is the bottom summary axis.
+    """
     fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
     fig.suptitle(title)
     formatter = lambda v, _: f"{int(v)}"
@@ -70,8 +117,6 @@ def make_plots(title: str, rows: int, cols: int):
     return fig, axes, axes_master
 
 
-# Plots non-master data on a subplot with the given parameters
-# Also adds the artists to the given list for rendering the cursors
 def plot_data(
         axis,
         timestamps: list[int],
@@ -84,6 +129,23 @@ def plot_data(
         title_color: str | None = None,
         show_legend: bool = False
         ):
+    """Plot one series on an axis and append line artists for interactive cursors.
+
+    Args:
+        axis: Target matplotlib axes.
+        timestamps: X coordinates.
+        data: Y coordinates.
+        data_label: Label used in the legend when enabled.
+        data_color: Line color.
+        artists: Mutable list extended with the line artist(s) from this plot.
+        axis_color: If set, colors the y-axis tick labels.
+        title: If set with ``title_color``, used as the y-axis label.
+        title_color: Color for the y-axis label when ``title`` is provided.
+        show_legend: Whether to call ``legend()`` on the axis.
+
+    Returns:
+        None.
+    """
     formatter = lambda v, _: f"{int(v)}"
 
     axis.xaxis.set_major_formatter(formatter)
@@ -108,27 +170,41 @@ def plot_data(
 
 # -- DATA CLASSES -------------------------------------------------------------
 
-# Data for a single trade, with the timestamp, symbol, quantity, and price
 class TradeData:
+    """One trade row: timestamp, symbol, quantity, and price."""
+
     def __init__(
             self,
             **kwargs
             ):
+        """Initialize from keyword arguments for the expected CSV columns.
+
+        Args:
+            **kwargs: Must include ``timestamp``, ``symbol``, ``quantity``, and ``price``.
+        """
         self.timestamp = int(kwargs["timestamp"])
         self.symbol = str(kwargs["symbol"])
         self.quantity = int(kwargs["quantity"])
         self.price = float(kwargs["price"])
 
     def __lt__(self, other):
+        """Return whether this trade is earlier than ``other`` by timestamp."""
         return self.timestamp < other.timestamp
 
 
-# Data for a single price update
 class PriceData:
+    """One order-book snapshot with averaged bid/ask prices and volumes."""
+
     def __init__(
             self,
             **kwargs
             ):
+        """Initialize from keyword arguments; top three bid/ask levels are averaged.
+
+        Args:
+            **kwargs: Must include ``timestamp``, ``product``, ``bid_price_*``,
+                ``ask_price_*``, ``bid_volume_*``, and ``ask_volume_*`` fields used below.
+        """
         self.timestamp = int(kwargs["timestamp"])
         self.product = str(kwargs["product"])
         self.bid_price = avg([kwargs["bid_price_1"], kwargs["bid_price_2"], kwargs["bid_price_3"]])
@@ -137,13 +213,25 @@ class PriceData:
         self.ask_volume = avg([kwargs["ask_volume_1"], kwargs["ask_volume_2"], kwargs["ask_volume_3"]])
 
     def __lt__(self, other):
+        """Return whether this update is earlier than ``other`` by timestamp."""
         return self.timestamp < other.timestamp
 
 
 # -- ANALYSIS FUNCTIONS -------------------------------------------------------
 
 def analyze_trade_data(data: pd.DataFrame, filename: str):
-    # Dictionary mapping trade items to their data by timestamp
+    """Plot per-symbol trade price and quantity, plus a combined price view.
+
+    Expects trade rows loadable as ``TradeData`` (grouped by ``symbol``).
+    Opens an interactive figure with hover annotations.
+
+    Args:
+        data: Trade history table.
+        filename: Label used in the figure title (typically the source file name).
+
+    Returns:
+        None. Prints a message and returns early if there are no rows.
+    """
     trades = defaultdict(list)
     load_object(TradeData, data, trades, "symbol")
 
@@ -212,6 +300,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
 
     @price_cursor.connect("add")
     def on_add_price(sel):
+        """Annotate hover selection on a price subplot."""
         x, y = sel.target
         sel.annotation.set_text(f"Timestamp: {x}\nPrice: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
@@ -222,6 +311,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
 
     @quantity_cursor.connect("add")
     def on_add_quantity(sel):
+        """Annotate hover selection on a quantity subplot."""
         x, y = sel.target
         sel.annotation.set_text(f"Timestamp: {x}\nQuantity: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
@@ -232,6 +322,7 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
 
     @master_cursor.connect("add")
     def on_add_master(sel):
+        """Annotate hover selection on the combined master axis."""
         x, y = sel.target
         sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
@@ -244,7 +335,18 @@ def analyze_trade_data(data: pd.DataFrame, filename: str):
 
 
 def analyze_price_data(data: pd.DataFrame, filename: str):
-    # Dictionary mapping trade items to their data by timestamp
+    """Plot per-product bid/ask/fair price and volumes, plus combined price series.
+
+    Expects rows loadable as ``PriceData`` (grouped by ``product``).
+    Opens an interactive figure with hover annotations.
+
+    Args:
+        data: Price / order-book history table.
+        filename: Label used in the figure title (typically the source file name).
+
+    Returns:
+        None. Prints a message and returns early if there are no rows.
+    """
     prices = defaultdict(list)
     load_object(PriceData, data, prices, "product")
 
@@ -373,6 +475,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
 
     @price_cursor.connect("add")
     def on_add_price(sel):
+        """Annotate hover selection on bid/ask/fair price lines."""
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
@@ -393,6 +496,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
 
     @quantity_cursor.connect("add")
     def on_add_quantity(sel):
+        """Annotate hover selection on bid/ask volume lines."""
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
@@ -409,6 +513,7 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
 
     @master_cursor.connect("add")
     def on_add_master(sel):
+        """Annotate hover selection on the combined master price lines."""
         x, y = sel.target
         symbol, type = sel.artist.get_label().split(' ', 1)
         if type == "bid":
@@ -424,16 +529,26 @@ def analyze_price_data(data: pd.DataFrame, filename: str):
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
+    # Actually plot everything
     ax_master.legend()
     plt.tight_layout()
     plt.show()
 
 
 def analyze_data(file_path: str):
-    # Load the csv data
+    """Load a semicolon-separated CSV and dispatch to trade or price visualization.
+
+    Chooses ``analyze_trade_data`` if a ``buyer`` column exists,
+    ``analyze_price_data`` if ``profit_and_loss`` exists; otherwise prints a notice.
+
+    Args:
+        file_path: Path to the CSV file.
+
+    Returns:
+        None.
+    """
     data = pd.read_csv(file_path, sep=";")
 
-    # Analyze the data according to type
     if "buyer" in data.columns:
         analyze_trade_data(data, os.path.basename(file_path))
     elif "profit_and_loss" in data.columns:
@@ -445,6 +560,7 @@ def analyze_data(file_path: str):
 # -- CLI ----------------------------------------------------------------------
 
 def main():
+    """Parse CLI paths and run ``analyze_data`` on each existing file."""
     files = []
     for arg in sys.argv[1:]:
         if os.path.isfile(arg):
