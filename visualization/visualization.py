@@ -159,11 +159,11 @@ def analyze_price_data(
         filename: str,
         denoiser: Callable[[list[int | float]], list[int | float]]
         ):
-    """plot per-product bid/ask/fair price and volumes, plus combined price
+    """Plot per-product bid/ask/fair price and volumes, plus combined price
     series.
 
-    expects rows loadable as ``pricedata`` (grouped by ``product``).
-    opens an interactive figure with hover annotations.
+    Expects rows loadable as ``PriceData`` (grouped by ``product``).
+    Opens an interactive figure with hover annotations.
 
     Args:
         data: Price / order-book history table.
