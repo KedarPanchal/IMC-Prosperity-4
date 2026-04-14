@@ -20,7 +20,7 @@ def make_plots(title: str, rows: int, cols: int, denoised: bool):
     spans the figure width for overlaying all items.
 
     Args:
-        title: Figure suptitle.
+        title: Figure suptitle and window title.
         rows: Number of subplot rows requested before the bottom strip is
         repurposed.
         cols: Number of columns.
@@ -31,7 +31,10 @@ def make_plots(title: str, rows: int, cols: int, denoised: bool):
         axis.
     """
     fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
-    fig.canvas.manager.set_window_title(title)  # type: ignore
+    try:
+        fig.canvas.manager.set_window_title(title)  # type: ignore
+    except AttributeError:
+        print("Warning: Unable to set window title; feature may be unsupported in this environment.")
     fig.suptitle(title)
 
     for ax in axes[-1]:
@@ -56,7 +59,7 @@ def plot_data(
         title_color: str | None = None,
         show_legend: bool = False
         ):
-    """Plot one series on an axis and append line artists for interactive 
+    """Plot one series on an axis and append line artists for interactive
     cursors.
 
     Args:
