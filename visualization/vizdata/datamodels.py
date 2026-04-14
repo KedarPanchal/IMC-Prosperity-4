@@ -52,7 +52,7 @@ def _avg(values: list):
 def load_object(
         obj: type,
         data: pd.DataFrame,
-        dict: dict[Any, list],
+        dict_: dict[Any, list],
         key: str
         ):
     """Build ``obj`` instances from dataframe rows and group them by a column
@@ -66,7 +66,7 @@ def load_object(
         obj: Class to instantiate for each row (must accept row fields as
         kwargs).
         data: Source table.
-        dict: Mapping from ``row[key]`` to lists of instances; updated in
+        dict_: Mapping from ``row[key]`` to lists of instances; updated in
         place.
         key: Column name whose values are the grouping keys.
 
@@ -74,9 +74,9 @@ def load_object(
         None.
     """
     for _, row in data.iterrows():
-        dict[row[key]].append(obj(**row.to_dict()))  # type: ignore
+        dict_[row[key]].append(obj(**row.to_dict()))  # type: ignore
 
-    for obj_list in dict.values():
+    for obj_list in dict_.values():
         obj_list.sort()
 
 
