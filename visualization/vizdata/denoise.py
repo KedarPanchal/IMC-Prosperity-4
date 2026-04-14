@@ -113,6 +113,9 @@ def haar_denoise(passes: int = 1):
         # Cap passes at log_2(len(data)) to avoid adding ghost coefficients
         num_passes = min(passes, math.floor(math.log2(len(data))))
 
+        # Track original length for padding during reconstruction
+        original_length = len(data)
+
         # Compute the coefficients for the specified number of passes
         for _ in range(num_passes):
             # Pair up the current approximation list and pad as needed
@@ -140,7 +143,7 @@ def haar_denoise(passes: int = 1):
                     ]
             cAs = _flatten(inverse_fourier)
 
-        return cAs
+        return cAs[:original_length]
 
     return haar
 
