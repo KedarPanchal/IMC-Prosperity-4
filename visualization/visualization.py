@@ -459,6 +459,8 @@ def main():
 
     args = parser.parse_args()
     # Can only pass --strength and --passes if --denoise is an argument
+    # TODO: This sucks absolute ass, reimplement with argument groups
+    #       This will also make adding bot classification much easier
     denoise_args = [
             arg
             for arg in ["--strategy", "-s", "--passes", "-p"]
