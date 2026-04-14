@@ -84,8 +84,6 @@ def identity_denoise(passes: int = 1):
     return identity
 
 
-# -- FOURIER DENOISING STRATEGIES ---------------------------------------------
-
 def haar_denoise(passes: int = 1):
     """Return a function that applies a simple Haar wavelet transform to
     denoise a numeric series.
@@ -142,6 +140,9 @@ def haar_denoise(passes: int = 1):
         return cAs
 
     return haar
+
+
+# -- FOURIER DENOISING STRATEGIES ---------------------------------------------
 
 
 # -- CONSTANTS ----------------------------------------------------------------

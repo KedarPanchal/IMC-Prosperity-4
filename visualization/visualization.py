@@ -446,7 +446,7 @@ def main():
             dest="strategy",
             choices=list(DENOISING_STRATEGIES.keys()),
             default="identity",
-            help="Which Fourier transform to utilize when denoising the data"
+            help="Which denoising algorithm to utilize when denoising the data"
             )
     parser.add_argument(
             "--passes",
