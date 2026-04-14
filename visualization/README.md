@@ -65,6 +65,12 @@ Notes:
 
 - The CSVs are expected to be **semicolon-separated** (`;`) (this is how IMC Prosperity exports are typically formatted).
 - The program will open **one interactive window per file**. Close the current window to move to the next file.
+- You can also pass files using `--files` / `-f` (this is optional, but can help if you prefer flag-style arguments):
+
+```bash
+uv run visualization.py --files path/to/file1.csv path/to/file2.csv
+```
+
 - If a file looks “wrong”, it may be the other dataset type. The program decides which view to show based on the columns it finds:
   - Trade-style CSVs (it detects a `buyer` column) show price + quantity per symbol, plus a combined “master” price plot.
   - Price/orderbook-style CSVs (it detects a `profit_and_loss` column) show bid/ask/fair value and volumes, plus a combined “master” plot.
