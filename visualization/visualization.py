@@ -87,7 +87,7 @@ def analyze_trade_data(
         plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title=f"quantity {' (denoised)' if denoised else ''}",
+            title=f"quantity{' (denoised)' if denoised else ''}",
             title_color="blue",
             timestamps=timestamps,
             data=quantities,
