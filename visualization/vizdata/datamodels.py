@@ -67,7 +67,8 @@ def load_object(
         kwargs).
         data: Source table.
         dict_: Mapping from ``row[key]`` to lists of instances; updated in
-        place.
+        place. Must be a defaultdict or default-initialize missing keys to
+        empty lists.
         key: Column name whose values are the grouping keys.
 
     Returns:
