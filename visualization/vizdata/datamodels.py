@@ -1,5 +1,4 @@
 """Data models for trade and price data, and helper functions to load them
-from
 """
 
 import pandas as pd
