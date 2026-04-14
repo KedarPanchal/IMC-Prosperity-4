@@ -423,7 +423,7 @@ def main():
             )
     parser.add_argument(
             "default_files",
-            nargs="+",
+            nargs="*",
             help="Paths to CSV files for analysis"
             )
     parser.add_argument(
