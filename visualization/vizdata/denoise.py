@@ -105,6 +105,10 @@ def haar_denoise(passes: int = 1):
         Returns:
             List of denoised values.
         """
+        # Return early if the input data is empty to avoid errors
+        if len(data) == 0:
+            return data
+
         # Store a list of the detail coefficients for reconstruction
         cD_list = []
         # Start with the approximations being the current data
