@@ -110,8 +110,11 @@ def haar_denoise(passes: int = 1):
         # Start with the approximations being the current data
         cAs = data
 
+        # Cap passes at log_2(len(data)) to avoid adding ghost coefficients
+        num_passes = min(passes, math.floor(math.log2(len(data))))
+
         # Compute the coefficients for the specified number of passes
-        for _ in range(passes):
+        for _ in range(num_passes):
             # Pair up the current approximation list and pad as needed
             cA_pairs = _pair(cAs)
             # Compute each pass's detail coefficients
