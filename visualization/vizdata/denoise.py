@@ -137,11 +137,11 @@ def haar_denoise(passes: int = 1):
         # Store the final computed approximations as the last layer
         # Reconstruct the denoised signal
         for coefficients in reversed(cD_list):
-            inverse_fourier = [
+            inverse_pairs = [
                     ((cA + cD) / _SQRT2, (cA - cD) / _SQRT2)
                     for cA, cD in zip(cAs, coefficients)
                     ]
-            cAs = _flatten(inverse_fourier)
+            cAs = _flatten(inverse_pairs)
 
         return cAs[:original_length]
 
