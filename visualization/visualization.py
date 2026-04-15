@@ -11,37 +11,35 @@ from vizdata.denoise import DENOISING_STRATEGIES
 
 def main():
     """Parse CLI paths and run ``analyze_data`` on each existing file."""
-
-    parser = argparse.ArgumentParser(
-            description="Visualize trade and price data from CSV files."
-            )
-    parser.add_argument(
+    
+    # Create base parser containing shared logic across commands
+    base_parser = argparse.ArgumentParser(add_help=False)
+    base_parser.add_argument(
             "--files",
             "-f",
             dest="files",
             nargs="*",
             help="Paths to CSV files for analysis"
             )
+    parser = argparse.ArgumentParser(
+        description="Visualize trade and price data from CSV files.",
+        )
 
-    subparser = parser.add_subparsers(dest="command", required=False)
-    # Dummy argument there for consistency and convenience
+    subparser = parser.add_subparsers(dest="command", required=True)
     analysis_parser = subparser.add_parser(
             "analysis",
-            help="Perform visualization without denoising the data"
+            parents=[base_parser],
+            help="Perform visualization with optional data denoising"
             )
-    denoise_parser = subparser.add_parser(
-            "denoise",
-            help="Denoise the data before visualization",
-            )
-    denoise_parser.add_argument(
-            "--strategy",
-            "-s",
-            dest="strategy",
-            choices=list(DENOISING_STRATEGIES.keys()),
-            default="identity",
-            help="Which denoising algorithm to utilize when denoising the data"
-            )
-    denoise_parser.add_argument(
+    analysis_parser.add_argument(
+        "--strategy",
+        "-s",
+        dest="strategy",
+        choices=list(DENOISING_STRATEGIES.keys()),
+        default="identity",
+        help="Which denoising algorithm to utilize when denoising the data"
+        )
+    analysis_parser.add_argument(
             "--passes",
             "-p",
             dest="passes",
@@ -65,10 +63,10 @@ def main():
 
     for file in files:
         analyze_data(
-                file,
-                "haar" if args.command == "denoise" else "identity",
-                args.passes if args.command == "denoise" else 0
-                )
+            file,
+            args.strategy,
+            args.passes
+        )
 
 
 if __name__ == "__main__":
