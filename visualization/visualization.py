@@ -1,7 +1,6 @@
 # pyright: reportUnusedFunction=false
 
 import argparse
-import sys
 import os
 
 from typing import Callable
@@ -422,25 +421,19 @@ def main():
             description="Visualize trade and price data from CSV files."
             )
     parser.add_argument(
-            "default_files",
-            nargs="*",
-            help="Paths to CSV files for analysis"
-            )
-    parser.add_argument(
             "--files",
             "-f",
             dest="files",
             nargs="*",
             help="Paths to CSV files for analysis"
             )
-    parser.add_argument(
-            "--denoise",
-            "-d",
-            dest="denoise",
-            action="store_true",
-            help="Denoise the data before plotting"
+
+    subparser = parser.add_subparsers(dest="command", required=False)
+    denoise_parser = subparser.add_parser(
+            "denoise",
+            help="Denoise the data before plotting",
             )
-    parser.add_argument(
+    denoise_parser.add_argument(
             "--strategy",
             "-s",
             dest="strategy",
@@ -448,7 +441,7 @@ def main():
             default="identity",
             help="Which denoising algorithm to utilize when denoising the data"
             )
-    parser.add_argument(
+    denoise_parser.add_argument(
             "--passes",
             "-p",
             dest="passes",
@@ -461,31 +454,23 @@ def main():
     # Can only pass --strength and --passes if --denoise is an argument
     # TODO: This sucks absolute ass, reimplement with argument groups
     #       This will also make adding bot classification much easier
-    denoise_args = [
-            arg
-            for arg in ["--strategy", "-s", "--passes", "-p"]
-            if arg in sys.argv
-            ]
-    if denoise_args and not args.denoise:
-        parser.error(
-            f"{' '.join(denoise_args)} can't be used if --denoise isn't passed",
-            )
     # Parsing files must be passed
-    to_parse = args.files + args.default_files if args.files and args.default_files else args.files or args.default_files
-    if not to_parse:
+    if not args.files:
         parser.error("No files to parse")
-    # If denoising, default strategy is haar
-    denoise_strategy = "haar" if args.denoise and ("--strategy" not in sys.argv and "-s" not in sys.argv) else args.strategy
 
     files = []
-    for file in to_parse:
+    for file in args.files:
         if os.path.isfile(file):
             files.append(file)
         else:
             parser.error(f"Unknown file: {file}")
 
     for file in files:
-        analyze_data(file, denoise_strategy, args.passes)
+        analyze_data(
+                file, 
+                "haar" if args.command == "denoise" else "identity",
+                args.passes if args.command == "denoise" else 0
+                )
 
 
 if __name__ == "__main__":
