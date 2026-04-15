@@ -4,6 +4,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import mplcursors
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
@@ -71,7 +72,6 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     # Drop columns for timestep, buyer, seller, and currency
     features = data.drop(columns=["timestamp", "buyer", "seller", "currency"])
     # Perform 1-hot encoding for purchased items
-    print(features.columns)
     features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
     # Normalize the features
     scaler = StandardScaler()
@@ -91,11 +91,29 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             c=kmeans.labels_,
             cmap=colormap,
             edgecolor='k',
-            alpha=0.6
+            alpha=0.6,
+            s=10,
+            picker=8
             )
     axes.set_xlabel("Symbol (One-Hot Encoded)")
     axes.set_ylabel("Price (Normalized)")
     axes.set_zlabel("Quantity (Normalized)")
     axes.set_title("K-Means Clustering of Trading Bots")
+
+    # Extract relevant features for hover annotations
+    hover_data = data[["timestamp", "symbol", "price", "quantity"]].to_numpy()
+
+    # Create cursor for hover annotations
+    cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
+
+    @cursor.connect("add")
+    def on_add(sel):
+        index = sel.index
+        timestamp, symbol, price, quantity = hover_data[index]
+        sel.annotation.set(text=f"Timestamp: {timestamp}\nSymbol: {symbol}\nPrice: {price}\nQuantity: {quantity}")
+        sel.annotation.get_bbox_patch().set_alpha(0.9)
+        sel.annotation.get_bbox_patch().set_facecolor(colormap(kmeans.labels_[index]))
+
+    # Actually plot the clusters
     fig.colorbar(scatter, ax=axes, label="Cluster Label")
     plt.show()

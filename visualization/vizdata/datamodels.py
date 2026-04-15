@@ -49,6 +49,8 @@ def _avg(values: list):
     return sum(map(float, actual)) / len(actual) if actual else 0
 
 
+# -- OBJECT LOADER ------------------------------------------------------------
+
 def load_objects(
         obj: type,
         data: pd.DataFrame,
