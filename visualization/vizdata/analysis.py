@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import mplcursors
 
 from vizdata.denoise import DENOISING_STRATEGIES, not_identity
-from vizdata.datamodels import TradeData, PriceData, load_object
+from vizdata.datamodels import TradeData, PriceData, load_objects
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
@@ -128,7 +128,7 @@ def analyze_trade_data(
         None. Prints a message and returns early if there are no rows.
     """
     trades = defaultdict(list)
-    load_object(TradeData, data, trades, "symbol")
+    load_objects(TradeData, data, trades, "symbol")
 
     # Check if any data was loaded
     if not trades:
@@ -266,7 +266,7 @@ def analyze_price_data(
         None. Prints a message and returns early if there are no rows.
     """
     prices = defaultdict(list)
-    load_object(PriceData, data, prices, "product")
+    load_objects(PriceData, data, prices, "product")
 
     # Check if any data was loaded
     if not prices:
