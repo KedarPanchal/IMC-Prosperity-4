@@ -12,12 +12,14 @@ from sklearn.preprocessing import StandardScaler
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
 
-def _pca(N: np.ndarray) -> np.ndarray:
+def _pca(N: np.ndarray, d: int) -> np.ndarray:
     """Perform Principal Component Analysis (PCA) on a 4D dataset to produce
-    its 3D projection.
+    its d-dimensional projection.
 
     Args:
         n: A 4D numpy array representing the dataset to be reduced.
+        d: The target dimensionality for the PCA projection (e.g., 2 for 2D).
+        Assumed to be less than or equal to the original dimensionality (4).
 
     Returns:
         A k x 3 numpy array containing the projection of the original data onto
@@ -32,7 +34,7 @@ def _pca(N: np.ndarray) -> np.ndarray:
     idx = np.argsort(eigenvalues)[::-1]
     eigenvectors = eigenvectors[:, idx]
     # Project the data onto the first two principal components
-    return eigenvectors[:, :3]
+    return eigenvectors[:, :d]
 
 
 def collate_data(files: list[str]) -> pd.DataFrame:
