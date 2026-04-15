@@ -7,39 +7,31 @@ import matplotlib.pyplot as plt
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from scipy.spatial import Voronoi, voronoi_plot_2d
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
 
-def _gram_schmidt2D(
-        v1: np.ndarray,
-        v2: np.ndarray
-        ) -> tuple[np.ndarray, np.ndarray]:
-    """Apply the Gram-Schmidt process to orthogonalize two 4D vectors for 2D
-    projection.
-
-    The first vector is held constant, and the second vector is modified to be
-    orthogonal to the first.
+def _pca(N: np.ndarray) -> np.ndarray:
+    """Perform Principal Component Analysis (PCA) on a 4D dataset to produce
+    its 3D projection.
 
     Args:
-        v1: The first 4D vector to be orthogonalized.
-        v2: The second 4D vector to be orthogonalized with respect to the
-        first.
+        n: A 4D numpy array representing the dataset to be reduced.
 
     Returns:
-        A tuple of the original first vector and the orthogonalized second
-        vector.
+        A k x 3 numpy array containing the projection of the original data onto
+        the first two principal components, where k is the number of samples in
+        the original dataset.
     """
-    # Normalize vector1
-    v1_norm = v1 / np.linalg.norm(v1)
-
-    # Project vector2 onto vector1
-    s = np.dot(v1_norm, v2) / np.linalg.norm(v2) * v1_norm
-    # Compute the orthogonal component of vector1 with respect to vector2
-    v2_orthogonal = v2 - s
-    v2_orthogonal_norm = v2_orthogonal / np.linalg.norm(v2_orthogonal)
-    return v1_norm, v2_orthogonal_norm
+    # Center the data
+    N = N - np.mean(N, axis=0)
+    C = np.cov(N, rowvar=False)
+    eigenvalues, eigenvectors = np.linalg.eigh(C)
+    # Sort eigenvalues and eigenvectors in descending order
+    idx = np.argsort(eigenvalues)[::-1]
+    eigenvectors = eigenvectors[:, idx]
+    # Project the data onto the first two principal components
+    return eigenvectors[:, :3]
 
 
 def collate_data(files: list[str]) -> pd.DataFrame:
@@ -74,12 +66,13 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
         clusters: The number of clusters to use for classification.
 
     Returns:
-        TBD
+        None.
     """
     # Drop columns for timestep, buyer, seller, and currency
     features = data.drop(columns=["timestamp", "buyer", "seller", "currency"])
     # Perform 1-hot encoding for purchased items
-    features = pd.get_dummies(features, columns=["symbol"])
+    print(features.columns)
+    features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
     # Normalize the features
     scaler = StandardScaler()
     features_norm = scaler.fit_transform(features.to_numpy())
@@ -87,16 +80,22 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     kmeans = KMeans(n_clusters=clusters, random_state=0)
     kmeans.fit(features_norm)
 
-    # The fitted data is 4D
-    # To visualize, define a projection matrix to project the data into 2D
-    p1, p2 = _gram_schmidt2D(
-        np.array([1, 1, 1, 0]),
-        np.array([0, 1, 1, 1])
-        )
-    projection_matrix = np.array([p1, p2]).T
-
-    # Project the cluster centers into 2D
-    centers_2d = kmeans.cluster_centers_ @ projection_matrix
-    vornoi_cells = Voronoi(centers_2d)
-    fig = voronoi_plot_2d(vornoi_cells)
+    # Plot the clusters in 3D, since their dimension is 3D anyway
+    fig = plt.figure(figsize=(16, 8))
+    axes = fig.add_subplot(1, 1, 1, projection="3d")
+    colormap = plt.get_cmap("viridis", clusters)
+    scatter = axes.scatter(
+            features_norm[:, 0],
+            features_norm[:, 1],
+            features_norm[:, 2],
+            c=kmeans.labels_,
+            cmap=colormap,
+            edgecolor='k',
+            alpha=0.6
+            )
+    axes.set_xlabel("Symbol (One-Hot Encoded)")
+    axes.set_ylabel("Price (Normalized)")
+    axes.set_zlabel("Quantity (Normalized)")
+    axes.set_title("K-Means Clustering of Trading Bots")
+    fig.colorbar(scatter, ax=axes, label="Cluster Label")
     plt.show()
