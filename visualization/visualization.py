@@ -5,7 +5,7 @@ import os
 
 from vizdata.analysis import analyze_data
 from vizdata.denoise import DENOISING_STRATEGIES
-from vizdata.botclassifier import collate_data
+from vizdata.botclassifier import collate_data, classify_bots
 
 
 # -- CLI ----------------------------------------------------------------------
@@ -61,7 +61,7 @@ def main():
             "-k",
             dest="clusters",
             type=int,
-            default=3,
+            default=10,
             help="The number of clusters to use for bot classification"
             )
 
@@ -88,6 +88,7 @@ def main():
     elif args.command == "classification":
         # Placeholder for classification logic
         data = collate_data(files)
+        classify_bots(data, args.clusters)
 
 
 if __name__ == "__main__":
