@@ -1,6 +1,6 @@
 # IMC Prosperity 4 Visualizer
 
-This tool opens an interactive window to explore IMC Prosperity 4 CSV data (trades or prices). You can zoom/pan like a normal chart, and you can hover points to see the exact timestamp/value.
+This tool opens interactive matplotlib windows to explore IMC Prosperity 4 CSV data (trade logs or price/orderbook logs). You can zoom/pan like a normal chart, and you can hover points to see the exact timestamp/value.
 
 ## What you need first
 
@@ -53,22 +53,22 @@ uv sync
 
 `uv sync` may take a minute the first time. After it finishes, you typically won’t need to do it again unless the project’s dependencies change.
 
-## Run the visualizer
+## Run: interactive visualization (`analysis`)
 
 Stay in the `visualization` folder and run:
 
 ```bash
-uv run visualization.py path/to/file1.csv path/to/file2.csv
+uv run visualization.py analysis -f path/to/file1.csv path/to/file2.csv
 ```
 
 Notes:
 
 - The CSVs are expected to be **semicolon-separated** (`;`) (this is how IMC Prosperity exports are typically formatted).
 - The program will open **one interactive window per file**. Close the current window to move to the next file.
-- You can also pass files using `--files` / `-f` (this is optional, but can help if you prefer flag-style arguments):
+- Files must be passed via `--files` / `-f` (positional file arguments are not supported).
 
 ```bash
-uv run visualization.py --files path/to/file1.csv path/to/file2.csv
+uv run visualization.py analysis --files path/to/file1.csv path/to/file2.csv
 ```
 
 - If a file looks “wrong”, it may be the other dataset type. The program decides which view to show based on the columns it finds:
@@ -79,41 +79,23 @@ uv run visualization.py --files path/to/file1.csv path/to/file2.csv
 
 Financial data often contains short-lived “noise” (tiny fluctuations, microstructure effects, random jumps) that can hide the bigger picture. Denoising is a way to **extract higher-level features**—like broader trends, regime changes, and persistent moves—by reducing that short-term noise before plotting.
 
-### Turn denoising on
-
-```bash
-uv run visualization.py --denoise path/to/file.csv
-```
-
-When you pass `--denoise`:
-
-- The charts will emphasize **trend and structure** (useful for feature extraction and analysis).
-- Some short, sharp events can be reduced or removed (so don’t use denoising if you need to study individual spikes/ticks).
-- If you do not pass `--denoise`, the raw data is plotted.
-
 ### Choose a denoising strategy
 
-Currently supported strategies:
-
-- `haar`: Haar wavelet denoising (the default when `--denoise` is enabled)
-- `identity`: effectively “no denoising” (useful for comparisons)
-
-Example:
-
 ```bash
-uv run visualization.py --denoise --strategy haar path/to/file.csv
+uv run visualization.py analysis -f path/to/file.csv --strategy haar
 ```
 
-Important:
+Supported strategies:
 
-- `--strategy` only works if you also include `--denoise`. If you try to use `--strategy` without `--denoise`, the program will stop with an error.
+- `haar`: Haar wavelet denoising
+- `identity`: no denoising (default)
 
 ### Control denoising strength with `--passes`
 
 `--passes` controls how strong the smoothing is (default is `2`).
 
 ```bash
-uv run visualization.py --denoise --passes 4 path/to/file.csv
+uv run visualization.py analysis -f path/to/file.csv --strategy haar --passes 4
 ```
 
 Impact of changing `--passes`:
@@ -122,12 +104,25 @@ Impact of changing `--passes`:
 - **Higher passes (e.g. 3–6)**: smoother curves; short spikes get reduced or removed.
 - **Too high**: the chart can become “over-smoothed”, where real turning points are flattened and fast moves look delayed or muted.
 
-Important:
+## Run: bot clustering (`classification`)
 
-- `--passes` only works if you also include `--denoise`. If you try to use `--passes` without `--denoise`, the program will stop with an error.
+There is also a clustering-based helper to group “bots” based on trade behavior. It expects **trade-style CSVs** (i.e., files with a `buyer` column).
+
+Run:
+
+```bash
+uv run visualization.py classification -f path/to/trades1.csv path/to/trades2.csv
+```
+
+Tune cluster count (default \(k=10\)):
+
+```bash
+uv run visualization.py classification -f path/to/trades.csv --clusters 15
+```
 
 ## Troubleshooting
 
 - If you get “Unknown file”: double-check the path and that the file exists.
 - If nothing shows up: make sure the window isn’t opening behind other windows; also confirm you’re running from the `visualization` folder.
 - If the chart looks empty or says it found no data: you may have provided a CSV with unexpected columns/formatting.
+- If you see “Unknown data being analyzed”: the CSV didn’t match the expected schemas (trade files need a `buyer` column; price/orderbook files need a `profit_and_loss` column).
