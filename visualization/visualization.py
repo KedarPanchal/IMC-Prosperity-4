@@ -48,7 +48,7 @@ def main():
             dest="passes",
             type=int,
             default=2,
-            help="The number of passes to perform the Fourier transform for"
+            help="The number of denoising passes to perform"
             )
 
     classification_parser = subparser.add_parser(
