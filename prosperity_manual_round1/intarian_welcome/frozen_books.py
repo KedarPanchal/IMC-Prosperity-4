@@ -29,13 +29,19 @@ EMBER_MUSHROOM_BIDS: Final[dict[int, int]] = {
     18: 6_000,
     17: 5_000,
     16: 10_000,
+    15: 5_000,
+    14: 10_000,
+    13: 7_000,
 }
+# Ask 17 is 0 in snapshot — omitted (no resting size).
 EMBER_MUSHROOM_ASKS: Final[dict[int, int]] = {
     12: 20_000,
     13: 25_000,
     14: 35_000,
     15: 6_000,
     16: 5_000,
+    18: 10_000,
+    19: 12_000,
 }
 
 DRYLAND_FLAX_BOOK: Final[tuple[dict[int, int], dict[int, int]]] = (
