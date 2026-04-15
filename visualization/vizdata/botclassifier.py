@@ -76,7 +76,10 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
         None.
     """
     # Drop columns for timestep, buyer, seller, and currency
-    features = data.drop(columns=["timestamp", "buyer", "seller", "currency"])
+    features = data.drop(
+            columns=["timestamp", "buyer", "seller", "currency"],
+            errors="ignore"
+            )
     # Perform 1-hot encoding for purchased items
     features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
     # Normalize the features
