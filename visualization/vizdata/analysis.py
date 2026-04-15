@@ -494,7 +494,7 @@ def analyze_data(file_path: str, strategy: str, passes: int):
         None.
     """
     # Read the pandas data
-    data = pd.read_csv(file_path, sep=";")
+    data = pd.read_csv(file_path, sep=';')
 
     # Determine the appropriate denoising function based on the strategy
     denoise = DENOISING_STRATEGIES[strategy](passes)
