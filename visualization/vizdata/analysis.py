@@ -23,9 +23,7 @@ def _formatter(value: Any, discard: Any):
     return f"{int(value)}"
 
 
-# -- PLOTTING FUNCTIONS -------------------------------------------------------
-
-def make_plots(title: str, rows: int, cols: int, denoised: bool):
+def _make_plots(title: str, rows: int, cols: int, denoised: bool):
     """Create a subplot grid and a full-width bottom axis for combined series.
 
     The last row of the grid is removed and replaced by ``axes_master``, which
@@ -59,7 +57,7 @@ def make_plots(title: str, rows: int, cols: int, denoised: bool):
     return fig, axes, axes_master
 
 
-def plot_data(
+def _plot_data(
         axis,
         timestamps: list[int],
         data: list[int | float],
@@ -109,9 +107,9 @@ def plot_data(
         axis.legend()
 
 
-# -- ANALYSIS FUNCTIONS -------------------------------------------------------
+# -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
 
-def analyze_trade_data(
+def _analyze_trade_data(
         data: pd.DataFrame,
         filename: str,
         denoiser: Callable[[list[int | float]], list[int | float]]
@@ -143,7 +141,7 @@ def analyze_trade_data(
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
-    _, axes, ax_master = make_plots(
+    _, axes, ax_master = _make_plots(
             f"Trade Data Analysis for {filename}",
             3,
             len(trades.items()),
@@ -164,7 +162,7 @@ def analyze_trade_data(
 
         # plot the trade data
         prices = denoiser([trade.price for trade in trade_list])
-        plot_data(
+        _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
             title=f"price{' (denoised)' if denoised else ''}",
@@ -178,7 +176,7 @@ def analyze_trade_data(
 
         # plot the quantity data
         quantities = denoiser([trade.quantity for trade in trade_list])
-        plot_data(
+        _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
             title=f"quantity{' (denoised)' if denoised else ''}",
@@ -248,7 +246,7 @@ def analyze_trade_data(
     plt.show()
 
 
-def analyze_price_data(
+def _analyze_price_data(
         data: pd.DataFrame,
         filename: str,
         denoiser: Callable[[list[int | float]], list[int | float]]
@@ -281,7 +279,7 @@ def analyze_price_data(
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
-    _, axes, ax_master = make_plots(
+    _, axes, ax_master = _make_plots(
             f"Price Data Analysis for {filename}",
             4,
             len(prices.items()),
@@ -309,7 +307,7 @@ def analyze_price_data(
         bid_prices = denoiser([price.bid_price for price in price_list])
         ask_prices = denoiser([price.ask_price for price in price_list])
         fair_value_prices = denoiser([(price.bid_price + price.ask_price) / 2 for price in price_list])
-        plot_data(
+        _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
             title=f"Bid/Ask Prices{' (denoised)' if denoised else ''}",
@@ -321,7 +319,7 @@ def analyze_price_data(
             artists=bid_price_artists,
             show_legend=True
             )
-        plot_data(
+        _plot_data(
             axis=axes[0, plot],  # type: ignore
             timestamps=timestamps,
             data=ask_prices,
@@ -330,7 +328,7 @@ def analyze_price_data(
             artists=ask_price_artists,
             show_legend=True
             )
-        plot_data(
+        _plot_data(
             axis=axes[0, plot],  # type: ignore
             timestamps=timestamps,
             data=fair_value_prices,
@@ -342,7 +340,7 @@ def analyze_price_data(
 
         # Plot the bid quantity data
         bid_volumes = denoiser([price.bid_volume for price in price_list])
-        plot_data(
+        _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
             title=f"Bid Volume{' (denoised)' if denoised else ''}",
@@ -356,7 +354,7 @@ def analyze_price_data(
 
         # Plot the ask quantity data
         ask_volumes = denoiser([price.ask_volume for price in price_list])
-        plot_data(
+        _plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
             title=f"Ask Volume{' (denoised)' if denoised else ''}",
@@ -500,9 +498,9 @@ def analyze_data(file_path: str, strategy: str, passes: int):
     denoise = DENOISING_STRATEGIES[strategy](passes)
 
     if "buyer" in data.columns:
-        analyze_trade_data(data, os.path.basename(file_path), denoise)
+        _analyze_trade_data(data, os.path.basename(file_path), denoise)
     elif "profit_and_loss" in data.columns:
-        analyze_price_data(data, os.path.basename(file_path), denoise)
+        _analyze_price_data(data, os.path.basename(file_path), denoise)
     else:
         print("Unknown data being analyzed")
 
