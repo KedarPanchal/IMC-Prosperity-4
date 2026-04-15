@@ -24,9 +24,14 @@ def main():
             )
 
     subparser = parser.add_subparsers(dest="command", required=False)
+    # Dummy argument there for consistency and convenience
+    analysis_parser = subparser.add_parser(
+            "analysis",
+            help="Perform visualization without denoising the data"
+            )
     denoise_parser = subparser.add_parser(
             "denoise",
-            help="Denoise the data before plotting",
+            help="Denoise the data before visualization",
             )
     denoise_parser.add_argument(
             "--strategy",
