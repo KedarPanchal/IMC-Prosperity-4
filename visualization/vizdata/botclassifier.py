@@ -110,7 +110,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     def on_add(sel):
         index = sel.index
         timestamp, symbol, price, quantity = hover_data[index]
-        sel.annotation.set_text(f"Timestamp: {timestamp}\nSymbol: {symbol}\nPrice: {price}\nQuantity: {quantity}")
+        sel.annotation.set_text(f"Timestamp: {timestamp}\nSymbol: {symbol}\nPrice: {price}\nQuantity: {quantity}\nCluster: {kmeans.labels_[index]}")  # type: ignore
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor(
             colormap(kmeans.labels_[index])  # type: ignore
