@@ -38,7 +38,7 @@ def _make_plots(title: str, rows: int, cols: int, denoised: bool):
     Returns:
         ``(fig, axes, axes_master)`` where ``axes`` is the remaining grid
         (without the bottom row) and ``axes_master`` is the bottom summary
-        axis.
+        axis in lieu of the original bottom row.
     """
     fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
     try:
