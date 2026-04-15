@@ -454,12 +454,12 @@ def _analyze_price_data(
     def on_add_master(sel):
         """Annotate hover selection on the combined master price lines."""
         x, y = sel.target
-        symbol, type = sel.artist.get_label().split(' ', 1)
-        if type == "bid":
+        symbol, trade_type = sel.artist.get_label().split(' ', 1)
+        if trade_type == "bid":
             sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
-        elif type == "ask":
+        elif trade_type == "ask":
             sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
