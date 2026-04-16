@@ -98,7 +98,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             print(f"Error: Day {day} is present in trade dataframes but not "
                   "price dataframes")
             return None
-        print(trade_dataframes[day].head())
+
         trade_dataframes[day]["timestamp"] += i * 1_000_000
         trade_master = trade_master.append(
                 trade_dataframes[day],
