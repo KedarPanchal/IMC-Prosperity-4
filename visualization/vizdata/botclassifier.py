@@ -159,11 +159,11 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                         "total_volume": curr["quantity"].sum(),
                         "num_trades": len(curr["quantity"]),  # Trade exclusive
                         "avg_trade_size": curr["quantity"].mean(),
-                    }),
+                    }, index=[0]),
                     final_dataframe,
                     ],
                 ignore_index=True
-                )
+                ).set_index("timestamp_start")
 
         return final_dataframe
 
