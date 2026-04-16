@@ -109,6 +109,8 @@ def _plot_data(
 
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
 
+# MAJOR TODO: Refactor the analysis functions to directly operate on DataFrames
+
 def _analyze_trade_data(
         data: pd.DataFrame,
         filename: str,
