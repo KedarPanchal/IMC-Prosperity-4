@@ -100,13 +100,13 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             return None
 
         trade_dataframes[day]["timestamp"] += i * 1_000_000
-        trade_master = trade_master.append(
-                trade_dataframes[day],
+        trade_master = pd.concat(
+                [trade_master, trade_dataframes[day]],
                 ignore_index=True
                 )
         price_dataframes[day]["timestamp"] += i * 1_000_000
-        price_master = price_master.concat(
-                price_dataframes[day],
+        price_master = pd.concat(
+                [price_master, price_dataframes[day]],
                 ignore_index=True
                 )
 
@@ -140,25 +140,28 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
         # Compute metrics for every symbol in the current timestep
         for symbol in set(timestamped["symbol"]):
             curr = timestamped[timestamped["symbol"] == symbol]
-            midprice_open = curr.iloc[0][cols].mean(axis=1)  # type: ignore
-            midprice_close = curr.iloc[-1][cols].mean(axis=1)  # type: ignore
+            midprice_open = curr.iloc[0][cols].mean()  # type: ignore
+            midprice_close = curr.iloc[-1][cols].mean()  # type: ignore
             midprice_low = curr[cols].mean(axis=1).min()
             midprice_high = curr[cols].mean(axis=1).max()
-            final_dataframe = final_dataframe.append(
-                pd.DataFrame({
-                    "timestamp_start": i,
-                    "timestamp_end": i + 1999,  # Inclusive end timestamp
-                    "symbol": symbol,
-                    "midprice_open": midprice_open,
-                    "midprice_close": midprice_close,
-                    "midprice_low": midprice_low,
-                    "midprice_high": midprice_high,
-                    "midprice_return": midprice_close / midprice_open - 1,
-                    "midprice_range": midprice_high - midprice_low,
-                    "total_volume": curr["quantity"].sum(),
-                    "num_trades": len(curr["quantity"]),  # Trade exclusive
-                    "avg_trade_size": curr["quantity"].mean(),
+            final_dataframe = pd.concat(
+                [
+                    pd.DataFrame({
+                        "timestamp_start": i,
+                        "timestamp_end": i + 1999,  # Inclusive end timestamp
+                        "symbol": symbol,
+                        "midprice_open": midprice_open,
+                        "midprice_close": midprice_close,
+                        "midprice_low": midprice_low,
+                        "midprice_high": midprice_high,
+                        "midprice_return": midprice_close / midprice_open - 1,
+                        "midprice_range": midprice_high - midprice_low,
+                        "total_volume": curr["quantity"].sum(),
+                        "num_trades": len(curr["quantity"]),  # Trade exclusive
+                        "avg_trade_size": curr["quantity"].mean(),
                     }),
+                    final_dataframe,
+                    ],
                 ignore_index=True
                 )
 
