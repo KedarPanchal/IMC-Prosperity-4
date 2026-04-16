@@ -88,6 +88,9 @@ def main():
     elif args.command == "classification":
         # Placeholder for classification logic
         data = collate_data(files)
+        if data is None:
+            parser.error("No valid data for classification")
+        # TODO: Fix to work with new dataframe information
         classify_bots(data, args.clusters)
 
 

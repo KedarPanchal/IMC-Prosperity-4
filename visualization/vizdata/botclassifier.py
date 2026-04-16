@@ -1,5 +1,7 @@
 """Classifies trading bots based on their behavior and characteristics.
 """
+from collections import defaultdict
+import re
 
 import pandas as pd
 import numpy as np
@@ -37,7 +39,7 @@ def _pca(N: np.ndarray, d: int) -> np.ndarray:
     return eigenvectors[:, :d]
 
 
-def collate_data(files: list[str]) -> pd.DataFrame:
+def collate_data(files: list[str]) -> pd.DataFrame | None:
     """Collate data from multiple files into a single dataset for
     classification.
 
@@ -50,16 +52,112 @@ def collate_data(files: list[str]) -> pd.DataFrame:
     Returns:
         A single DataFrame containing the collated data from all valid files.
     """
-    # Only include dataframes that contain the "buyer" column (trade data)
-    dfs = list(
-            filter(
-                lambda d: "buyer" in d.columns,
-                (pd.read_csv(file, sep=';') for file in files)
+    # Split dataframes into trade and price dataframes by day
+    trade_dataframes = defaultdict(pd.DataFrame)
+    price_dataframes = defaultdict(pd.DataFrame)
+    day_regex = re.compile(r"(?<=day_)[-\d]{1,2}")
+
+    for file in files:
+        df = pd.read_csv(file)
+        match = day_regex.search(file)
+        if not match:
+            print(f"Warning: File {file} does not contain a valid day number")
+            continue
+        day = int(match.group())
+        if "trades" in file:
+            trade_dataframes[day] = df
+        elif "prices" in file:
+            price_dataframes[day] = df
+        else:
+            print(
+                f"Warning: File {file} is not a valid trade or price "
+                "dataframe"
                 )
+
+    # Exit early if the same number of trade and price rows haven't been read
+    if len(trade_dataframes) != len(price_dataframes):
+        print(
+            f"Error: Processed {len(trade_dataframes)} trade dataframes but "
+            f"only {len(price_dataframes)} price dataframes"
             )
-    if len(dfs) < len(files):
-        print(f"Warning: {len(files) - len(dfs)} files were invalid")
-    return pd.concat(dfs, ignore_index=True)
+        return None
+
+    trade_dataframes = dict(sorted(trade_dataframes.items()))
+    price_dataframes = dict(sorted(price_dataframes.items()))
+
+    # Timesteps are ~1 million per day, so concatenate dataframes for each day
+    # and then concatenate all days.
+    # Add 1 million for each day to the timestamp to ensure unique timestamps
+    # across days.
+    # Since trades and prices should have the same days, we can also check that
+    # the same days are present in both dictionaries.
+    trade_master = pd.DataFrame()
+    price_master = pd.DataFrame()
+    for i, day in enumerate(trade_dataframes.keys()):
+        if day not in price_dataframes:
+            print(f"Error: Day {day} is present in trade dataframes but not "
+                  "price dataframes")
+            return None
+
+        trade_dataframes[day]["timestamp"] += i * 1_000_000
+        trade_master = trade_master.append(
+                trade_dataframes[day],
+                ignore_index=True
+                )
+        price_dataframes[day]["timestamp"] += i * 1_000_000
+        price_master = price_master.concat(
+                price_dataframes[day],
+                ignore_index=True
+                )
+
+    # Aggregate data by timestep and symbol as an outer join to ensure all
+    # timesteps are included, even if they only appear in one of the
+    # dataframes.
+    price_master.rename(columns={"product": "symbol"}, inplace=True)
+    master = pd.merge(
+            trade_master,
+            price_master,
+            on=["timestamp", "symbol"],
+            how="outer"
+            )
+    final_timestep = master["timestamp"].max()
+
+    # Timesteps have a difference of about 2k between them
+    # This means in the final dataframe, aggregate data in steps of 2k
+    final_dataframe = pd.DataFrame()
+    for i in range(0, final_timestep + 1, 2000):
+        current_rows = master[
+                (master["timestamp"] >= i) & (master["timestamp"] < i + 2000)
+                ]
+        cols = [
+                "bid_price_1",
+                "bid_price_2",
+                "bid_price_3",
+                "ask_price_1",
+                "ask_price_2",
+                "ask_price_3"
+                ]
+        midprice_open = current_rows.iloc[0][cols].mean()
+        midprice_close = current_rows.iloc[-1][cols].mean()
+        midprice_low = current_rows[cols].mean(axis=1).min()
+        midprice_high = current_rows[cols].mean(axis=1).max()
+        final_dataframe = final_dataframe.append(
+            pd.DataFrame({
+                "timestamp": i,
+                "midprice_open": midprice_open,
+                "midprice_close": midprice_close,
+                "midprice_low": midprice_low,
+                "midprice_high": midprice_high,
+                "midprice_return": midprice_close / midprice_open - 1,
+                "midprice_range": midprice_high - midprice_low,
+                "total_volume": current_rows["quantity"].sum(),
+                "num_trades": len(current_rows["quantity"]),  # Trade exclusive
+                "avg_trade_size": current_rows["quantity"].mean(),
+                }),
+            ignore_index=True
+            )
+
+        return final_dataframe
 
 
 def classify_bots(data: pd.DataFrame, clusters: int) -> None:
