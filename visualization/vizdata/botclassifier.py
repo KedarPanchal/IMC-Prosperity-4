@@ -161,9 +161,10 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             )
     # Perform 1-hot encoding for purchased items
     features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
-    # Normalize the features
+    # Normalize the features and perform PCA for dimensionality reduction
     scaler = StandardScaler()
-    pca_features = PCA(n_components=2).fit_transform(scaler.fit_transform(features))
+    pca = PCA(n_components=2, svd_solver="full")
+    pca_features = pca.fit_transform(scaler.fit_transform(features))
     # Perform k-means clustering
     kmeans = KMeans(n_clusters=clusters, random_state=0)
     kmeans.fit(pca_features)
@@ -183,7 +184,14 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             picker=8
             )
     voronoi = Voronoi(kmeans.cluster_centers_)
-    voronoi_plot_2d(voronoi, ax=axes, show_vertices=False, show_points=False, line_colors='k', line_width=1, point_size=2)
+    voronoi_plot_2d(
+            voronoi,
+            ax=axes,
+            show_vertices=False,
+            show_points=False,
+            line_colors='k',
+            line_width=1,
+            )
     axes.set_xlabel("PCA Component 1")
     axes.set_ylabel("PCA Component 2")
     axes.set_title("K-Means Clustering of Trading Bots")
