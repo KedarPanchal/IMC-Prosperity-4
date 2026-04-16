@@ -126,7 +126,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     # This means in the final dataframe, aggregate data in steps of 2k
     final_dataframe = pd.DataFrame()
     for i in range(0, final_timestep + 1, 2000):
-        current_rows = master[
+        timestamped = master[
                 (master["timestamp"] >= i) & (master["timestamp"] < i + 2000)
                 ]
         cols = [
@@ -137,25 +137,28 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                 "ask_price_2",
                 "ask_price_3"
                 ]
-        midprice_open = current_rows.iloc[0][cols].mean()
-        midprice_close = current_rows.iloc[-1][cols].mean()
-        midprice_low = current_rows[cols].mean(axis=1).min()
-        midprice_high = current_rows[cols].mean(axis=1).max()
-        final_dataframe = final_dataframe.append(
-            pd.DataFrame({
-                "timestamp": i,
-                "midprice_open": midprice_open,
-                "midprice_close": midprice_close,
-                "midprice_low": midprice_low,
-                "midprice_high": midprice_high,
-                "midprice_return": midprice_close / midprice_open - 1,
-                "midprice_range": midprice_high - midprice_low,
-                "total_volume": current_rows["quantity"].sum(),
-                "num_trades": len(current_rows["quantity"]),  # Trade exclusive
-                "avg_trade_size": current_rows["quantity"].mean(),
-                }),
-            ignore_index=True
-            )
+        # Compute metrics for every symbol in the current timestep
+        for symbol in set(timestamped["symbol"]):
+            curr = timestamped[timestamped["symbol"] == symbol]
+            midprice_open = curr.iloc[0][cols].mean(axis=1)  # type: ignore
+            midprice_close = curr.iloc[-1][cols].mean(axis=1)  # type: ignore
+            midprice_low = curr[cols].mean(axis=1).min()
+            midprice_high = curr[cols].mean(axis=1).max()
+            final_dataframe = final_dataframe.append(
+                pd.DataFrame({
+                    "timestamp": i,
+                    "midprice_open": midprice_open,
+                    "midprice_close": midprice_close,
+                    "midprice_low": midprice_low,
+                    "midprice_high": midprice_high,
+                    "midprice_return": midprice_close / midprice_open - 1,
+                    "midprice_range": midprice_high - midprice_low,
+                    "total_volume": curr["quantity"].sum(),
+                    "num_trades": len(curr["quantity"]),  # Trade exclusive
+                    "avg_trade_size": curr["quantity"].mean(),
+                    }),
+                ignore_index=True
+                )
 
         return final_dataframe
 
@@ -174,10 +177,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
         None.
     """
     # Drop columns for timestep, buyer, seller, and currency
-    features = data.drop(
-            columns=["timestamp", "buyer", "seller", "currency"],
-            errors="ignore"
-            )
+    features = data.drop(columns=["timestamp"], errors="ignore")
     # Perform 1-hot encoding for purchased items
     features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
     # Normalize the features
