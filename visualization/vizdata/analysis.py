@@ -306,7 +306,7 @@ def _analyze_price_data(
         # Plot the bid/ask/fair value price data
         bid_prices = denoiser([price.bid_price for price in price_list])
         ask_prices = denoiser([price.ask_price for price in price_list])
-        fair_value_prices = denoiser([(price.bid_price + price.ask_price) / 2 for price in price_list])
+        fair_value_prices = denoiser([price.mid_price for price in price_list])
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
