@@ -200,18 +200,22 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
 
     # TODO: Add descriptions showing composition of PCA axes
+    print(pca.components_)
+    print(pca.explained_variance_ratio_)
 
     @cursor.connect("add")
     def on_add(sel):
         index = sel.index
         local_data = data.iloc[index]
         sel.annotation.set_text(
-            f"Timestamp: {local_data.name}\n"
+            f"Start Timestamp: {local_data.name}\n"
             f"Symbol: {local_data['symbol']}\n"
-            f"Midprice Open: {local_data['midprice_open']:.2f}\n"
-            f"Midprice Close: {local_data['midprice_close']:.2f}\n"
-            f"Midprice Return: {local_data['midprice_return']:.4f}\n"
-            f"Midprice Range: {local_data['midprice_range']:.2f}\n"
+            f"Mid Price Open: {local_data['midprice_open']:.2f}\n"
+            f"Mid Price Close: {local_data['midprice_close']:.2f}\n"
+            f"Mid Price Low: {local_data['midprice_low']:.2f}\n"
+            f"Mid Price High: {local_data['midprice_high']:.2f}\n"
+            f"Mid Price Return: {local_data['midprice_return']:.4f}\n"
+            f"Mid Price Range: {local_data['midprice_range']:.2f}\n"
             f"Total Volume: {local_data['total_volume']}\n"
             f"Number of Trades: {local_data['num_trades']}\n"
             f"Average Trade Size: {local_data['avg_trade_size']:.2f}\n"
