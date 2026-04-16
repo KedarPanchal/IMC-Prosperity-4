@@ -156,7 +156,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     """
     # Drop columns for timesteps
     features = data.drop(
-            columns=["timestamp_start", "timestep_end"],
+            columns=["timestamp_start", "timestamp_end"],
             errors="ignore"
             )
     # Perform 1-hot encoding for purchased items
@@ -200,8 +200,10 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
 
     # TODO: Add descriptions showing composition of PCA axes
-    print(pca.components_)
-    print(pca.explained_variance_ratio_)
+    loadings_dataframe = pd.DataFrame(
+            pca.components_,
+            columns=features.columns
+            )
 
     @cursor.connect("add")
     def on_add(sel):
