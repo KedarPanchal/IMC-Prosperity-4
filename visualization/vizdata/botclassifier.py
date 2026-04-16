@@ -148,6 +148,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                 pd.DataFrame({
                     "timestamp_start": i,
                     "timestamp_end": i + 1999,  # Inclusive end timestamp
+                    "symbol": symbol,
                     "midprice_open": midprice_open,
                     "midprice_close": midprice_close,
                     "midprice_low": midprice_low,
