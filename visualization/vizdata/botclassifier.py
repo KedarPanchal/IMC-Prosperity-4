@@ -4,40 +4,16 @@ from collections import defaultdict
 import re
 
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+from scipy.spatial import Voronoi, voronoi_plot_2d
 import mplcursors
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
-
-def _pca(N: np.ndarray, d: int) -> np.ndarray:
-    """Perform Principal Component Analysis (PCA) on a dataset to produce its
-    d-dimensional projection.
-
-    Args:
-        n: A numpy array representing the dataset to be reduced.
-        d: The target dimensionality for the PCA projection (e.g., 2 for 2D).
-        Assumed to be less than or equal to the original dimensionality.
-
-    Returns:
-        A k x d numpy array containing the projection of the original data onto
-        the first two principal components, where k is the number of samples in
-        the original dataset.
-    """
-    # Center the data
-    N = N - np.mean(N, axis=0)
-    C = np.cov(N, rowvar=False)
-    eigenvalues, eigenvectors = np.linalg.eigh(C)
-    # Sort eigenvalues and eigenvectors in descending order
-    idx = np.argsort(eigenvalues)[::-1]
-    eigenvectors = eigenvectors[:, idx]
-    # Project the data onto the first two principal components
-    return eigenvectors[:, :d]
-
 
 def collate_data(files: list[str]) -> pd.DataFrame | None:
     """Collate data from multiple files into a single dataset for
@@ -120,7 +96,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             on=["timestamp", "symbol"],
             how="outer"
             )
-    final_timestep = master["timestamp"].max()
+    final_timestep = int(master["timestamp"].max())  # type: ignore
 
     # Timesteps have a difference of about 2k between them
     # This means in the final dataframe, aggregate data in steps of 2k
@@ -129,23 +105,21 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
         timestamped = master[
                 (master["timestamp"] >= i) & (master["timestamp"] < i + 2000)
                 ]
-        cols = [
-                "bid_price_1",
-                "bid_price_2",
-                "bid_price_3",
-                "ask_price_1",
-                "ask_price_2",
-                "ask_price_3"
-                ]
         # Compute metrics for every symbol in the current timestep
         for symbol in set(timestamped["symbol"]):
-            curr = timestamped[timestamped["symbol"] == symbol]
-            midprice_open = curr.iloc[0][cols].mean()  # type: ignore
-            midprice_close = curr.iloc[-1][cols].mean()  # type: ignore
-            midprice_low = curr[cols].mean(axis=1).min()
-            midprice_high = curr[cols].mean(axis=1).max()
+            # A mid_price of 0 means no trades occurred
+            curr = timestamped[
+                    (timestamped["symbol"] == symbol) &
+                    (timestamped["mid_price"] > 0)
+                    ]
+            midprice_open = curr.iloc[0]["mid_price"]  # type: ignore
+            midprice_close = curr.iloc[-1]["mid_price"]  # type: ignore
+            midprice_low = curr["mid_price"].min()
+            midprice_high = curr["mid_price"].max()
+            avg_trade_size = curr["quantity"].mean()
             final_dataframe = pd.concat(
                 [
+                    final_dataframe,
                     pd.DataFrame({
                         "timestamp_start": i,
                         "timestamp_end": i + 1999,  # Inclusive end timestamp
@@ -158,14 +132,13 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                         "midprice_range": midprice_high - midprice_low,
                         "total_volume": curr["quantity"].sum(),
                         "num_trades": len(curr["quantity"]),  # Trade exclusive
-                        "avg_trade_size": curr["quantity"].mean(),
-                    }, index=[0]),
-                    final_dataframe,
+                        "avg_trade_size": avg_trade_size if pd.notna(avg_trade_size) else 0  # type: ignore
+                    }, index=["timestamp_start"]),
                     ],
                 ignore_index=True
-                ).set_index("timestamp_start")
+                )
 
-        return final_dataframe
+    return final_dataframe.set_index("timestamp_start")
 
 
 def classify_bots(data: pd.DataFrame, clusters: int) -> None:
@@ -190,12 +163,12 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
     # Normalize the features
     scaler = StandardScaler()
-    pca_features = _pca(scaler.fit_transform(features.to_numpy()), 2)
+    pca_features = PCA(n_components=2).fit_transform(scaler.fit_transform(features))
     # Perform k-means clustering
     kmeans = KMeans(n_clusters=clusters, random_state=0)
     kmeans.fit(pca_features)
 
-    # Plot the clusters in 3D, since their dimension is 3D anyway
+    # Plot the clusters in a Voronoi diagram
     fig = plt.figure(figsize=(16, 8))
     axes = fig.add_subplot(1, 1, 1)
     colormap = plt.get_cmap("viridis", clusters)
@@ -209,12 +182,11 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             s=10,
             picker=8
             )
+    voronoi = Voronoi(kmeans.cluster_centers_)
+    voronoi_plot_2d(voronoi, ax=axes, show_vertices=False, show_points=False, line_colors='k', line_width=1, point_size=2)
     axes.set_xlabel("PCA Component 1")
     axes.set_ylabel("PCA Component 2")
     axes.set_title("K-Means Clustering of Trading Bots")
-
-    # Extract relevant features for hover annotations
-    hover_data = data[["timestamp", "symbol"]].to_numpy()
 
     # Create cursor for hover annotations
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
@@ -222,9 +194,20 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     @cursor.connect("add")
     def on_add(sel):
         index = sel.index
-        timestamp, symbol = hover_data[index]
-        sel.annotation.set_text(f"Timestamp: {timestamp}\nSymbol: {symbol}\nCluster: {kmeans.labels_[index]}")  # type: ignore
-        sel.annotation.get_bbox_patch().set_alpha(0.9)
+        local_data = data.iloc[index]
+        sel.annotation.set_text(
+            f"Timestamp: {local_data.name}\n"
+            f"Symbol: {local_data['symbol']}\n"
+            f"Midprice Open: {local_data['midprice_open']:.2f}\n"
+            f"Midprice Close: {local_data['midprice_close']:.2f}\n"
+            f"Midprice Return: {local_data['midprice_return']:.4f}\n"
+            f"Midprice Range: {local_data['midprice_range']:.2f}\n"
+            f"Total Volume: {local_data['total_volume']}\n"
+            f"Number of Trades: {local_data['num_trades']}\n"
+            f"Average Trade Size: {local_data['avg_trade_size']:.2f}\n"
+            f"Cluster: {kmeans.labels_[index]}"  # type: ignore
+        )
+        sel.annotation.get_bbox_patch().set_alpha(0.95)
         sel.annotation.get_bbox_patch().set_facecolor(
             colormap(kmeans.labels_[index])  # type: ignore
             )
