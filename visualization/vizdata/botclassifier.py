@@ -15,16 +15,16 @@ from sklearn.preprocessing import StandardScaler
 # -- PRIVATE HELPERS ----------------------------------------------------------
 
 def _pca(N: np.ndarray, d: int) -> np.ndarray:
-    """Perform Principal Component Analysis (PCA) on a 4D dataset to produce
-    its d-dimensional projection.
+    """Perform Principal Component Analysis (PCA) on a dataset to produce its
+    d-dimensional projection.
 
     Args:
-        n: A 4D numpy array representing the dataset to be reduced.
+        n: A numpy array representing the dataset to be reduced.
         d: The target dimensionality for the PCA projection (e.g., 2 for 2D).
-        Assumed to be less than or equal to the original dimensionality (4).
+        Assumed to be less than or equal to the original dimensionality.
 
     Returns:
-        A k x 3 numpy array containing the projection of the original data onto
+        A k x d numpy array containing the projection of the original data onto
         the first two principal components, where k is the number of samples in
         the original dataset.
     """
