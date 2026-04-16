@@ -199,6 +199,8 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     # Create cursor for hover annotations
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
 
+    # TODO: Add descriptions showing composition of PCA axes
+
     @cursor.connect("add")
     def on_add(sel):
         index = sel.index
