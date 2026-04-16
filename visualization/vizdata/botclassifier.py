@@ -146,7 +146,8 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             midprice_high = curr[cols].mean(axis=1).max()
             final_dataframe = final_dataframe.append(
                 pd.DataFrame({
-                    "timestamp": i,
+                    "timestamp_start": i,
+                    "timestamp_end": i + 1999,  # Inclusive end timestamp
                     "midprice_open": midprice_open,
                     "midprice_close": midprice_close,
                     "midprice_low": midprice_low,
@@ -176,8 +177,11 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     Returns:
         None.
     """
-    # Drop columns for timestep, buyer, seller, and currency
-    features = data.drop(columns=["timestamp"], errors="ignore")
+    # Drop columns for timesteps
+    features = data.drop(
+            columns=["timestamp_start", "timestep_end"],
+            errors="ignore"
+            )
     # Perform 1-hot encoding for purchased items
     features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
     # Normalize the features
