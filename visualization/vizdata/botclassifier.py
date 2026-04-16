@@ -58,7 +58,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     day_regex = re.compile(r"(?<=day_)[-\d]{1,2}")
 
     for file in files:
-        df = pd.read_csv(file)
+        df = pd.read_csv(file, sep=';')
         match = day_regex.search(file)
         if not match:
             print(f"Warning: File {file} does not contain a valid day number")
@@ -98,7 +98,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             print(f"Error: Day {day} is present in trade dataframes but not "
                   "price dataframes")
             return None
-
+        print(trade_dataframes[day].head())
         trade_dataframes[day]["timestamp"] += i * 1_000_000
         trade_master = trade_master.append(
                 trade_dataframes[day],
@@ -187,19 +187,18 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
     # Normalize the features
     scaler = StandardScaler()
-    features_norm = scaler.fit_transform(features.to_numpy())
+    pca_features = _pca(scaler.fit_transform(features.to_numpy()), 2)
     # Perform k-means clustering
     kmeans = KMeans(n_clusters=clusters, random_state=0)
-    kmeans.fit(features_norm)
+    kmeans.fit(pca_features)
 
     # Plot the clusters in 3D, since their dimension is 3D anyway
     fig = plt.figure(figsize=(16, 8))
-    axes = fig.add_subplot(1, 1, 1, projection="3d")
+    axes = fig.add_subplot(1, 1, 1)
     colormap = plt.get_cmap("viridis", clusters)
     scatter = axes.scatter(
-            features_norm[:, 0],
-            features_norm[:, 1],
-            features_norm[:, 2],
+            pca_features[:, 0],
+            pca_features[:, 1],
             c=kmeans.labels_,
             cmap=colormap,
             edgecolor='k',
@@ -207,13 +206,12 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             s=10,
             picker=8
             )
-    axes.set_xlabel("Symbol (One-Hot Encoded)")
-    axes.set_ylabel("Price (Normalized)")
-    axes.set_zlabel("Quantity (Normalized)")
+    axes.set_xlabel("PCA Component 1")
+    axes.set_ylabel("PCA Component 2")
     axes.set_title("K-Means Clustering of Trading Bots")
 
     # Extract relevant features for hover annotations
-    hover_data = data[["timestamp", "symbol", "price", "quantity"]].to_numpy()
+    hover_data = data[["timestamp", "symbol"]].to_numpy()
 
     # Create cursor for hover annotations
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
@@ -221,8 +219,8 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     @cursor.connect("add")
     def on_add(sel):
         index = sel.index
-        timestamp, symbol, price, quantity = hover_data[index]
-        sel.annotation.set_text(f"Timestamp: {timestamp}\nSymbol: {symbol}\nPrice: {price}\nQuantity: {quantity}\nCluster: {kmeans.labels_[index]}")  # type: ignore
+        timestamp, symbol = hover_data[index]
+        sel.annotation.set_text(f"Timestamp: {timestamp}\nSymbol: {symbol}\nCluster: {kmeans.labels_[index]}")  # type: ignore
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor(
             colormap(kmeans.labels_[index])  # type: ignore
