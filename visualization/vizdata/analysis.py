@@ -552,7 +552,11 @@ def analyze_data(
             print(f"Warning: File {file_path} is not a valid trade or price data file")
 
     # Determine the appropriate denoising function based on the strategy
-    denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
+    try:
+        denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
+    except ValueError as e:
+        print(f"Error: {e}. Defaulting to no denoising.")
+        denoise = DENOISING_STRATEGIES["identity"](passes, alpha)
 
     if len(trade_paths) > 0:
         # Offset timestamps by day to ensure they are plotted chronologically

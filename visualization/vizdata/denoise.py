@@ -171,6 +171,10 @@ def exponential_moving_average_denoise(passes: int = 1, *args):
         A function that takes a list of numeric values and returns a denoised
         list of the same length.
     """
+    a = args[0] if args else 0.5
+    if not (0 < a < 1):
+        raise ValueError("Alpha value for EMA must be in the range (0, 1)")
+
     def ema(data: list[int | float]):
         """Apply an exponential moving average to denoise a numeric series.
 
@@ -184,7 +188,6 @@ def exponential_moving_average_denoise(passes: int = 1, *args):
             return data
 
         smoothed = data[:]
-        a = args[0] if args else 0.5
         for _ in range(passes):
             for i in range(1, len(smoothed)):
                 smoothed[i] = a * smoothed[i] + (1 - a) * smoothed[i - 1]
