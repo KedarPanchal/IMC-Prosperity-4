@@ -113,7 +113,6 @@ def _plot_data(
 
 def _analyze_trade_data(
         data: pd.DataFrame,
-        filename: str,
         denoiser: Callable[[list[int | float]], list[int | float]]
         ):
     """Plot per-symbol trade price and quantity, plus a combined price view.
@@ -141,7 +140,7 @@ def _analyze_trade_data(
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
     _, axes, ax_master = _make_plots(
-            f"Trade Data Analysis for {filename}",
+            "Trade Data Analysis",
             3,
             len(set(data["symbol"])),
             denoised
@@ -248,7 +247,6 @@ def _analyze_trade_data(
 
 def _analyze_price_data(
         data: pd.DataFrame,
-        filename: str,
         denoiser: Callable[[list[int | float]], list[int | float]]
         ):
     """Plot per-product bid/ask/fair price and volumes, plus combined price
@@ -278,7 +276,7 @@ def _analyze_price_data(
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
     _, axes, ax_master = _make_plots(
-            f"Price Data Analysis for {filename}",
+            "Price Data Analysis",
             4,
             len(set(data["product"])),
             denoised
