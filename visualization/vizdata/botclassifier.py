@@ -5,6 +5,7 @@ import re
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from scipy.spatial import Voronoi, voronoi_plot_2d
 import mplcursors
 
@@ -155,12 +156,12 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
         None.
     """
     # Drop columns for timesteps
-    features = data.drop(
+    dropped = data.drop(
             columns=["timestamp_start", "timestamp_end"],
             errors="ignore"
             )
     # Perform 1-hot encoding for purchased items
-    features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
+    features = pd.get_dummies(dropped, columns=["symbol"], drop_first=True)
     # Normalize the features and perform PCA for dimensionality reduction
     scaler = StandardScaler()
     pca = PCA(n_components=2, svd_solver="full")
@@ -172,6 +173,8 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     # Plot the clusters in a Voronoi diagram
     fig = plt.figure(figsize=(16, 8))
     axes = fig.add_subplot(1, 1, 1)
+    fig.subplots_adjust(right=0.8, bottom=0.2, top=0.8)
+
     colormap = plt.get_cmap("viridis", clusters)
     scatter = axes.scatter(
             pca_features[:, 0],
@@ -184,7 +187,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             picker=8
             )
     voronoi = Voronoi(kmeans.cluster_centers_)
-    voronoi_plot_2d(
+    fig = voronoi_plot_2d(
             voronoi,
             ax=axes,
             show_vertices=False,
@@ -197,37 +200,53 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     axes.set_title("K-Means Clustering of Trading Bots")
 
     # Create cursor for hover annotations
+    COL_NAMES = {
+        "symbol": "Symbol",
+        "symbol_INTARIAN_PEPPER_ROOT": "Symbol",
+        "midprice_open": "Mid Price Open",
+        "midprice_close": "Mid Price Close",
+        "midprice_low": "Mid Price Low",
+        "midprice_high": "Mid Price High",
+        "midprice_return": "Mid Price Return",
+        "midprice_range": "Mid Price Range",
+        "total_volume": "Total Volume",
+        "num_trades": "Number of Trades",
+        "avg_trade_size": "Average Trade Size",
+    }
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
 
     # TODO: Add descriptions showing composition of PCA axes
-    loadings_dataframe = pd.DataFrame(
-            pca.components_,
+    contributions = np.square(pca.components_)
+    contributions = contributions / contributions.sum(axis=1, keepdims=True)
+    contributions_dataframe = pd.DataFrame(
+            contributions * 100,
             columns=features.columns
             )
+    fig.text(
+        0.85,
+        0.3,
+        "PCA Component 1 Composition:\n" +
+        '\n'.join(f"{COL_NAMES[col]}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns) +
+        "\n\nPCA Component 2 Composition:\n" +
+        '\n'.join(f"{COL_NAMES[col]}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
+        )
 
     @cursor.connect("add")
     def on_add(sel):
         index = sel.index
-        local_data = data.iloc[index]
+
+        local_data = data.iloc[[index]]
+        numeric_columns = local_data.select_dtypes(include='number').columns
+        local_data[numeric_columns] = local_data[numeric_columns].round(4)
         sel.annotation.set_text(
-            f"Start Timestamp: {local_data.name}\n"
-            f"Symbol: {local_data['symbol']}\n"
-            f"Mid Price Open: {local_data['midprice_open']:.2f}\n"
-            f"Mid Price Close: {local_data['midprice_close']:.2f}\n"
-            f"Mid Price Low: {local_data['midprice_low']:.2f}\n"
-            f"Mid Price High: {local_data['midprice_high']:.2f}\n"
-            f"Mid Price Return: {local_data['midprice_return']:.4f}\n"
-            f"Mid Price Range: {local_data['midprice_range']:.2f}\n"
-            f"Total Volume: {local_data['total_volume']}\n"
-            f"Number of Trades: {local_data['num_trades']}\n"
-            f"Average Trade Size: {local_data['avg_trade_size']:.2f}\n"
-            f"Cluster: {kmeans.labels_[index]}"  # type: ignore
-        )
+            f"Start Timestamp: {local_data.index[0]}\n" +
+            '\n'.join(f"{COL_NAMES[col]}: {local_data[col].iloc[0]}" for col in dropped.columns) +
+            f"\nCluster: {kmeans.labels_[index]}"  # type: ignore
+            )
         sel.annotation.get_bbox_patch().set_alpha(0.95)
         sel.annotation.get_bbox_patch().set_facecolor(
             colormap(kmeans.labels_[index])  # type: ignore
             )
 
     # Actually plot the clusters
-    fig.colorbar(scatter, ax=axes, label="Cluster Label")
     plt.show()
