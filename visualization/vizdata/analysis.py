@@ -293,25 +293,28 @@ def _analyze_price_data(
     ask_master_artists = []
     mid_master_artists = []
 
+    # Compute masks for rows with nonzero bid/ask volumes and mid price
+    # Avoid plotting zero values to reduce noise
+    nonzero_bids = (
+            data["bid_volume_1"] +
+            data["bid_volume_2"] +
+            data["bid_volume_3"] > 0
+            )
+    nonzero_asks = (
+                data["ask_volume_1"] +
+                data["ask_volume_2"] +
+                data["ask_volume_3"] > 0
+                )
+    # No mid volume, so check the price to see if information is available
+    nonzero_mid = data["mid_price"] > 0
+
+
     # Render each individual price item in a subplot
     for plot, symbol in enumerate(sorted(set(data["product"]))):
         mask = symbol == data["product"]
         # Set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
         axes[2, plot].set_xlabel("Timestamp")  # type: ignore
-
-        nonzero_bids = (
-            data["bid_volume_1"] +
-            data["bid_volume_2"] +
-            data["bid_volume_3"] > 0
-            )
-        nonzero_asks = (
-                data["ask_volume_1"] +
-                data["ask_volume_2"] +
-                data["ask_volume_3"] > 0
-                )
-        # No mid volume, so check the price to see if information is available
-        nonzero_mid = data["mid_price"] > 0
 
         bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
         ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
