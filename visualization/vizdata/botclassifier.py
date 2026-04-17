@@ -1,43 +1,22 @@
 """Classifies trading bots based on their behavior and characteristics.
 """
+from collections import defaultdict
+import re
 
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy.spatial import Voronoi, voronoi_plot_2d
 import mplcursors
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
 
-def _pca(N: np.ndarray, d: int) -> np.ndarray:
-    """Perform Principal Component Analysis (PCA) on a 4D dataset to produce
-    its d-dimensional projection.
-
-    Args:
-        n: A 4D numpy array representing the dataset to be reduced.
-        d: The target dimensionality for the PCA projection (e.g., 2 for 2D).
-        Assumed to be less than or equal to the original dimensionality (4).
-
-    Returns:
-        A k x 3 numpy array containing the projection of the original data onto
-        the first two principal components, where k is the number of samples in
-        the original dataset.
-    """
-    # Center the data
-    N = N - np.mean(N, axis=0)
-    C = np.cov(N, rowvar=False)
-    eigenvalues, eigenvectors = np.linalg.eigh(C)
-    # Sort eigenvalues and eigenvectors in descending order
-    idx = np.argsort(eigenvalues)[::-1]
-    eigenvectors = eigenvectors[:, idx]
-    # Project the data onto the first two principal components
-    return eigenvectors[:, :d]
-
-
-def collate_data(files: list[str]) -> pd.DataFrame:
+def collate_data(files: list[str]) -> pd.DataFrame | None:
     """Collate data from multiple files into a single dataset for
     classification.
 
@@ -50,16 +29,118 @@ def collate_data(files: list[str]) -> pd.DataFrame:
     Returns:
         A single DataFrame containing the collated data from all valid files.
     """
-    # Only include dataframes that contain the "buyer" column (trade data)
-    dfs = list(
-            filter(
-                lambda d: "buyer" in d.columns,
-                (pd.read_csv(file, sep=';') for file in files)
+    # Split dataframes into trade and price dataframes by day
+    trade_dataframes = defaultdict(pd.DataFrame)
+    price_dataframes = defaultdict(pd.DataFrame)
+    day_regex = re.compile(r"(?<=day_)-?\d+")
+
+    for file in files:
+        df = pd.read_csv(file, sep=';')
+        match = day_regex.search(file)
+        if not match:
+            print(f"Warning: File {file} does not contain a valid day number")
+            continue
+        day = int(match.group())
+        if "trades" in file:
+            trade_dataframes[day] = df
+        elif "prices" in file:
+            price_dataframes[day] = df
+        else:
+            print(
+                f"Warning: File {file} is not a valid trade or price "
+                "dataframe"
                 )
+
+    # Exit early if the same number of trade and price rows haven't been read
+    if len(trade_dataframes) != len(price_dataframes):
+        print(
+            f"Error: Processed {len(trade_dataframes)} trade dataframes but "
+            f"only {len(price_dataframes)} price dataframes"
             )
-    if len(dfs) < len(files):
-        print(f"Warning: {len(files) - len(dfs)} files were invalid")
-    return pd.concat(dfs, ignore_index=True)
+        return None
+
+    trade_dataframes = dict(sorted(trade_dataframes.items()))
+    price_dataframes = dict(sorted(price_dataframes.items()))
+
+    # Timesteps are ~1 million per day, so concatenate dataframes for each day
+    # and then concatenate all days.
+    # Add 1 million for each day to the timestamp to ensure unique timestamps
+    # across days.
+    # Since trades and prices should have the same days, we can also check that
+    # the same days are present in both dictionaries.
+    trade_master = pd.DataFrame()
+    price_master = pd.DataFrame()
+    for i, day in enumerate(trade_dataframes.keys()):
+        if day not in price_dataframes:
+            print(f"Error: Day {day} is present in trade dataframes but not "
+                  "price dataframes")
+            return None
+
+        trade_dataframes[day]["timestamp"] += i * 1_000_000
+        trade_master = pd.concat(
+                [trade_master, trade_dataframes[day]],
+                ignore_index=True
+                )
+        price_dataframes[day]["timestamp"] += i * 1_000_000
+        price_master = pd.concat(
+                [price_master, price_dataframes[day]],
+                ignore_index=True
+                )
+
+    # Aggregate data by timestep and symbol as an outer join to ensure all
+    # timesteps are included, even if they only appear in one of the
+    # dataframes.
+    price_master.rename(columns={"product": "symbol"}, inplace=True)
+    master = pd.merge(
+            trade_master,
+            price_master,
+            on=["timestamp", "symbol"],
+            how="outer"
+            )
+    final_timestep = int(master["timestamp"].max())  # type: ignore
+
+    # Timesteps have a difference of about 2k between them
+    # This means in the final dataframe, aggregate data in steps of 2k
+    final_dataframe_components = []
+    for i in range(0, final_timestep + 1, 2000):
+        timestamped = master[
+                (master["timestamp"] >= i) & (master["timestamp"] < i + 2000)
+                ]
+        # Compute metrics for every symbol in the current timestep
+        for symbol in set(timestamped["symbol"]):
+            # A mid_price of 0 means no trades occurred
+            curr = timestamped[
+                    (timestamped["symbol"] == symbol) &
+                    (timestamped["mid_price"] > 0)
+                    ]
+            if curr.empty:  # type: ignore
+                continue
+
+            midprice_open = curr.iloc[0]["mid_price"]  # type: ignore
+            midprice_close = curr.iloc[-1]["mid_price"]  # type: ignore
+            midprice_low = curr["mid_price"].min()
+            midprice_high = curr["mid_price"].max()
+            avg_trade_size = curr.loc[curr["quantity"] > 0, "quantity"].mean()  # type: ignore
+            final_dataframe_components.append(
+                    pd.DataFrame({
+                        "timestamp_start": i,
+                        "timestamp_end": i + 1999,  # Inclusive end timestamp
+                        "symbol": symbol,
+                        "midprice_open": midprice_open,
+                        "midprice_close": midprice_close,
+                        "midprice_low": midprice_low,
+                        "midprice_high": midprice_high,
+                        "midprice_return": midprice_close / midprice_open - 1,
+                        "midprice_range": midprice_high - midprice_low,
+                        "total_volume": curr["quantity"].sum(),
+                        "num_trades": len(curr.loc[curr["quantity"] > 0, "quantity"]),  # type: ignore
+                        "avg_trade_size": avg_trade_size if pd.notna(avg_trade_size) else 0  # type: ignore
+                    }, index=["timestamp_start"]),
+                )
+
+    final_dataframe = pd.DataFrame()
+    final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
+    return final_dataframe.set_index("timestamp_start")
 
 
 def classify_bots(data: pd.DataFrame, clusters: int) -> None:
@@ -75,28 +156,30 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     Returns:
         None.
     """
-    # Drop columns for timestep, buyer, seller, and currency
-    features = data.drop(
-            columns=["timestamp", "buyer", "seller", "currency"],
+    # Drop columns for timesteps
+    dropped = data.drop(
+            columns=["timestamp_start", "timestamp_end"],
             errors="ignore"
             )
     # Perform 1-hot encoding for purchased items
-    features = pd.get_dummies(features, columns=["symbol"], drop_first=True)
-    # Normalize the features
+    features = pd.get_dummies(dropped, columns=["symbol"], drop_first=True)
+    # Normalize the features and perform PCA for dimensionality reduction
     scaler = StandardScaler()
-    features_norm = scaler.fit_transform(features.to_numpy())
+    pca = PCA(n_components=2, svd_solver="full")
+    pca_features = pca.fit_transform(scaler.fit_transform(features))
     # Perform k-means clustering
     kmeans = KMeans(n_clusters=clusters, random_state=0)
-    kmeans.fit(features_norm)
+    kmeans.fit(pca_features)
 
-    # Plot the clusters in 3D, since their dimension is 3D anyway
+    # Plot the clusters in a Voronoi diagram
     fig = plt.figure(figsize=(16, 8))
-    axes = fig.add_subplot(1, 1, 1, projection="3d")
+    axes = fig.add_subplot(1, 1, 1)
+    fig.subplots_adjust(right=0.8, bottom=0.2, top=0.8)
+
     colormap = plt.get_cmap("viridis", clusters)
     scatter = axes.scatter(
-            features_norm[:, 0],
-            features_norm[:, 1],
-            features_norm[:, 2],
+            pca_features[:, 0],
+            pca_features[:, 1],
             c=kmeans.labels_,
             cmap=colormap,
             edgecolor='k',
@@ -104,27 +187,74 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             s=10,
             picker=8
             )
-    axes.set_xlabel("Symbol (One-Hot Encoded)")
-    axes.set_ylabel("Price (Normalized)")
-    axes.set_zlabel("Quantity (Normalized)")
+    if len(kmeans.cluster_centers_) >= 2:
+        voronoi = Voronoi(kmeans.cluster_centers_)
+        voronoi_plot_2d(
+                voronoi,
+                ax=axes,
+                show_vertices=False,
+                show_points=False,
+                line_colors='k',
+                line_width=1,
+                )
+    axes.set_xlabel("PCA Component 1")
+    axes.set_ylabel("PCA Component 2")
     axes.set_title("K-Means Clustering of Trading Bots")
 
-    # Extract relevant features for hover annotations
-    hover_data = data[["timestamp", "symbol", "price", "quantity"]].to_numpy()
-
     # Create cursor for hover annotations
+    COL_NAMES = {
+        "symbol": "Symbol",
+        "symbol_INTARIAN_PEPPER_ROOT": "Symbol",
+        "midprice_open": "Mid Price Open",
+        "midprice_close": "Mid Price Close",
+        "midprice_low": "Mid Price Low",
+        "midprice_high": "Mid Price High",
+        "midprice_return": "Mid Price Return",
+        "midprice_range": "Mid Price Range",
+        "total_volume": "Total Volume",
+        "num_trades": "Number of Trades",
+        "avg_trade_size": "Average Trade Size",
+    }
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
+
+    # TODO: Add descriptions showing composition of PCA axes
+    contributions = np.square(pca.components_)
+    contributions = contributions / contributions.sum(axis=1, keepdims=True)
+    contributions_dataframe = pd.DataFrame(
+            contributions * 100,
+            columns=features.columns
+            )
+    fig.text(
+        0.82,
+        0.55,
+        "PCA Component 1 Composition:\n\n" +
+        '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
+        )
+    fig.text(
+        0.82,
+        0.225,
+        "PCA Component 2 Composition:\n\n" +
+        '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
+        )
 
     @cursor.connect("add")
     def on_add(sel):
         index = sel.index
-        timestamp, symbol, price, quantity = hover_data[index]
-        sel.annotation.set_text(f"Timestamp: {timestamp}\nSymbol: {symbol}\nPrice: {price}\nQuantity: {quantity}\nCluster: {kmeans.labels_[index]}")  # type: ignore
-        sel.annotation.get_bbox_patch().set_alpha(0.9)
+
+        local_data = data.iloc[[index]]
+        numeric_columns = local_data.select_dtypes(include='number').columns
+        local_data[numeric_columns] = local_data[numeric_columns].round(4)
+        sel.annotation.set_text(
+            f"Start Timestamp: {local_data.index[0]}\n" +
+            '\n'.join(f"{COL_NAMES.get(col, col)}: {local_data[col].iloc[0]}" for col in dropped.columns) +
+            f"\nCluster: {kmeans.labels_[index]}"  # type: ignore
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.95)
         sel.annotation.get_bbox_patch().set_facecolor(
             colormap(kmeans.labels_[index])  # type: ignore
             )
 
     # Actually plot the clusters
-    fig.colorbar(scatter, ax=axes, label="Cluster Label")
     plt.show()

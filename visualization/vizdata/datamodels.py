@@ -153,6 +153,7 @@ class PriceData:
                     kwargs["ask_volume_3"],
                     ],
                 )
+        self.mid_price = kwargs["mid_price"]
 
     def __lt__(self, other):
         """Return whether this update is earlier than ``other`` by
