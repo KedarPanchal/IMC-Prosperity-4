@@ -26,6 +26,11 @@ PEPPER_MED_SIGNAL = 5.0
 PEPPER_CROSS_SIGNAL = 16.0
 PEPPER_MAX_HIST = 160
 
+# pepper SMA drawdown overlay (vs mid history)
+PEPPER_SMA_PERIOD = 32
+PEPPER_SMA_POS_MIN_FRAC = 0.08
+PEPPER_SMA_BUFFER = 0.5
+
 # signal regression coefficients
 REG_DRIFT = 0.75
 REG_VEL = 0.25
@@ -57,6 +62,12 @@ def ema(values, span):
     for x in values[1:]:
         out = alpha * x + (1 - alpha) * out
     return out
+
+def sma(values, n):
+    if len(values) < n or n <= 0:
+        return None
+    window = values[-n:]
+    return sum(window) / float(n)
 
 def depth_imbalance(od: OrderDepth) -> float:
     bid_vol = sum(qty for qty in od.buy_orders.values())
@@ -213,6 +224,20 @@ class Trader:
         dir_cap = int(limit * PEPPER_DIR_CAP_FRAC)
         mm_cap = int(limit * PEPPER_MM_CAP_FRAC)
 
+        mid = hist[-1]
+        sma_val = sma(hist, PEPPER_SMA_PERIOD)
+        pos_min = max(5, int(limit * PEPPER_SMA_POS_MIN_FRAC))
+        protect_long = (
+            sma_val is not None
+            and pos >= pos_min
+            and mid < sma_val - PEPPER_SMA_BUFFER
+        )
+        protect_short = (
+            sma_val is not None
+            and pos <= -pos_min
+            and mid > sma_val + PEPPER_SMA_BUFFER
+        )
+
         # dynamic threshold for spread crossing
         take_threshold = 3.0 + 0.25 * max(0, spread - 12)
         if abs_signal < PEPPER_MED_SIGNAL:
@@ -238,21 +263,45 @@ class Trader:
         quote_size = max(5, quote_size)
 
         # aggressive crossing on strong signals
-        if bullish and ask <= reservation - take_threshold and pos < dir_cap and max_buy > 0:
+        if (
+            bullish
+            and not protect_long
+            and ask <= reservation - take_threshold
+            and pos < dir_cap
+            and max_buy > 0
+        ):
             qty = min(max_buy, take_size)
             orders.append(Order(product, ask, qty))
             max_buy -= qty
-        elif bearish and bid >= reservation + take_threshold and pos > -dir_cap and max_sell > 0:
+        elif (
+            bearish
+            and not protect_short
+            and bid >= reservation + take_threshold
+            and pos > -dir_cap
+            and max_sell > 0
+        ):
             qty = min(max_sell, take_size)
             orders.append(Order(product, bid, -qty))
             max_sell -= qty
         else:
             # momentum cross on extreme signals
-            if bullish and abs_signal > PEPPER_CROSS_SIGNAL and pos < dir_cap and max_buy > 0:
+            if (
+                bullish
+                and not protect_long
+                and abs_signal > PEPPER_CROSS_SIGNAL
+                and pos < dir_cap
+                and max_buy > 0
+            ):
                 qty = min(max_buy, max(6, int(limit * 0.16)))
                 orders.append(Order(product, ask, qty))
                 max_buy -= qty
-            elif bearish and abs_signal > PEPPER_CROSS_SIGNAL and pos > -dir_cap and max_sell > 0:
+            elif (
+                bearish
+                and not protect_short
+                and abs_signal > PEPPER_CROSS_SIGNAL
+                and pos > -dir_cap
+                and max_sell > 0
+            ):
                 qty = min(max_sell, max(6, int(limit * 0.16)))
                 orders.append(Order(product, bid, -qty))
                 max_sell -= qty
@@ -290,6 +339,14 @@ class Trader:
             quote_ask = max(quote_ask, ask)
             quote_bid = min(ask - 1, quote_bid + 1)
 
+        # SMA: mid vs average against position -> lean quotes toward flattening
+        if protect_long:
+            quote_bid = min(quote_bid, bid)
+            quote_ask = max(bid + 1, quote_ask - 1)
+        elif protect_short:
+            quote_ask = max(quote_ask, ask)
+            quote_bid = min(ask - 1, quote_bid + 1)
+
         quote_bid = min(quote_bid, ask - 1)
         quote_ask = max(quote_ask, bid + 1)
 
@@ -305,6 +362,13 @@ class Trader:
                 sell_size = clamp(min(max_sell, int(quote_size * 1.5)), 0, max_sell)
                 buy_size = clamp(min(max_buy, max(3, int(quote_size * 0.6))), 0, max_buy)
 
+            if protect_long:
+                buy_size = 0
+                sell_size = clamp(min(max_sell, int(quote_size * 1.6)), 0, max_sell)
+            elif protect_short:
+                sell_size = 0
+                buy_size = clamp(min(max_buy, int(quote_size * 1.6)), 0, max_buy)
+
             if buy_size > 0 and pos < dir_cap:
                 orders.append(Order(product, quote_bid, buy_size))
             if sell_size > 0 and pos > -dir_cap:
@@ -314,9 +378,9 @@ class Trader:
             l2_buy = clamp(min(max_buy, max(0, int(quote_size * 0.65))), 0, max_buy)
             l2_sell = clamp(min(max_sell, max(0, int(quote_size * 0.65))), 0, max_sell)
 
-            if l2_buy > 0 and quote_bid - 1 > 0 and pos < dir_cap:
+            if l2_buy > 0 and not protect_long and quote_bid - 1 > 0 and pos < dir_cap:
                 orders.append(Order(product, quote_bid - 1, l2_buy))
-            if l2_sell > 0 and pos > -dir_cap:
+            if l2_sell > 0 and not protect_short and pos > -dir_cap:
                 orders.append(Order(product, quote_ask + 1, -l2_sell))
 
         return orders
