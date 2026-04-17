@@ -111,18 +111,23 @@ Fill walk with you last at price 17:
 | 17 user (you) | 19,999 | 90,999 |
 | 16 resting leftover | 1 | 91,000 |
 
-Per-unit margin = `20 − 16 − 0.10 = 3.90`. **Profit = 19,999 × 3.90 = 77,996.1**.
+Per-unit margin under the **corrected** fee model (auction leg 0.05, buyback leg 0.10, total 0.15):
 
-Neighbor checks:
+  `margin = 20 − 16 − 0.05 − 0.10 = 3.85`
+  **Profit = 19,999 × 3.85 = 76,996.15**.
 
-- **Q = 20,000 at price 17**: `V(17) = 91k` ties `V(16) = 91k` → P\* = 17 → margin drops to `2.90` → profit 58,000.
-- **Q = 19,998 at price 17**: still P\* = 16, fill 19,998 → profit 77,992.2.
-- **Bid 18 × 35,000**: drives `V(18) = 101k`, strict max → P\* = 18, margin 1.90, fill bounded at 35k → profit 66,500.
-- **Bid 19 × 53,000**: drives `V(19) = 113k`, margin 0.90, fill 53k → profit 47,700.
-- **Bid 16 × large**: P\* = 16 but you sit behind 10k resting at 16, fill ≤ 10k → profit ≤ 39,000.
-- **Short side**: P\* ≤ 20 always → `(P\* − 20) − 0.10` ≤ −0.10 → non-positive for any positive fill.
+(For reference, the prior estimate assumed a flat 0.10 fee only on the buyback leg, giving 77,996.1. The fee correction is a uniform `−0.05 × fill = −999.95` across every long candidate, so the argmax is unchanged.)
 
-`(17, 19999)` is the strict argmax.
+Neighbor checks under the corrected fees:
+
+- **Q = 20,000 at price 17**: `V(17) = 91k` ties `V(16) = 91k` → P\* = 17 → margin `20 − 17 − 0.15 = 2.85` → profit `20,000 × 2.85 = 57,000`.
+- **Q = 19,998 at price 17**: still P\* = 16, fill 19,998 → profit `19,998 × 3.85 = 76,992.3`.
+- **Bid 18 × 35,000**: drives `V(18) = 101k`, strict max → P\* = 18, margin `1.85`, fill 35,000 → profit `64,750`.
+- **Bid 19 × 53,000**: drives `V(19) = 113k`, P\* = 19, margin `0.85`, fill 53,000 → profit `45,050`.
+- **Bid 16 × large**: P\* = 16 but you sit behind 10k resting at 16, fill ≤ 10,000 → profit ≤ `38,500`.
+- **Short side**: P\* ≤ 20 always → `(P\* − 20) − 0.15 ≤ −0.15` for any positive fill, and the guild only rescues **long** inventory anyway.
+
+`(17, 19999)` is still the strict argmax.
 
 ## Does "last in line" change the picks?
 
@@ -144,14 +149,14 @@ your_fill = min( Q, max(0, V* − demand_above_your_price − resting_at_your_pr
 ## Caveats worth keeping in mind
 
 1. **Short side is probably not actionable.** Rules in `round1.md` say the Merchant Guild **buys** any inventory you traded at a fixed price — that only rescues long positions. `ClearingSimulator` still scores shorts as `(P* − anchor) − fee`, which silently assumes a counterparty that doesn't exist in the rules. Treat any `best_short_*` line as an upper bound that likely cannot be realized.
-2. **Fee placement for mushroom (0.10).** `ProductParams` charges it on the buyback leg. If the live rules instead charge it on the auction leg (or split 0.05 / 0.05), the optimal `(price, Q)` is unchanged; only the reported profit shifts (worst case `19,999 × 3.80 = 75,996.2` if the fee compounds).
+2. **Fee placement for mushroom (confirmed).** Auction leg is `0.05` per unit on both buy and sell, and the guild charges an additional `0.10` per unit on the buyback leg — total `0.15` per round-trip long unit. `ProductParams` currently models only the `0.10` buyback term, so `run_analysis.py`'s reported profits are optimistic by `0.05 × fill ≈ 1,000` on the mushroom winner. The argmax `(price, Q)` is unchanged because the auction-leg fee is a constant shift across all long candidates at a given fill.
 3. **Snapshot drift.** `frozen_books.py` is a manual transcription. A one-unit change to 30-level flax bids or 17-level mushroom bids can move the knife-edge Q by exactly the same amount. Re-run the EV grid if the UI book updates; the `--dense-through` sweep in `ev_enumeration.py` guarantees these integer cliffs are not missed.
 4. **Cliff robustness.** The two picks are exactly on the tie-break edge. If you want to pay a small premium for robustness: `flax bid 30 × 9,900` (−99 profit), `mushroom bid 17 × 19,500` (−1,946 profit). Probably not worth it if the live snapshot matches `frozen_books.py`.
 
 ## Final submission
 
-- `DRYLAND_FLAX`: **bid 30 × 9,999** → +9,999
-- `EMBER_MUSHROOM`: **bid 17 × 19,999** → +77,996.1
-- **Manual total ≈ +87,995 XIRECs** (~44% of the 200k round-1 goal in `round1.md`).
+- `DRYLAND_FLAX`: **bid 30 × 9,999** → `+9,999.00` (no fees)
+- `EMBER_MUSHROOM`: **bid 17 × 19,999** → `+76,996.15` (auction 0.05/unit + buyback 0.10/unit)
+- **Manual total ≈ +86,995.15 XIRECs** (~43.5% of the 200k round-1 goal in `round1.md`).
 
 No short orders from the grid.
