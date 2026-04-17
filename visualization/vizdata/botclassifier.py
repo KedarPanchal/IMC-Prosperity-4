@@ -223,12 +223,18 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             columns=features.columns
             )
     fig.text(
-        0.85,
-        0.3,
-        "PCA Component 1 Composition:\n" +
-        '\n'.join(f"{COL_NAMES[col]}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns) +
-        "\n\nPCA Component 2 Composition:\n" +
+        0.82,
+        0.55,
+        "PCA Component 1 Composition:\n\n" +
+        '\n'.join(f"{COL_NAMES[col]}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
+        )
+    fig.text(
+        0.82,
+        0.225,
+        "PCA Component 2 Composition:\n\n" +
         '\n'.join(f"{COL_NAMES[col]}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
         )
 
     @cursor.connect("add")
