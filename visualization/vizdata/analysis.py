@@ -3,7 +3,6 @@ denoising.
 """
 
 from typing import Callable, Any
-from collections import defaultdict
 
 import os
 
@@ -13,7 +12,6 @@ import matplotlib.pyplot as plt
 import mplcursors
 
 from vizdata.denoise import DENOISING_STRATEGIES, not_identity
-from vizdata.datamodels import TradeData, PriceData, load_objects
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
@@ -265,11 +263,9 @@ def _analyze_price_data(
     Returns:
         None. Prints a message and returns early if there are no rows.
     """
-    prices = defaultdict(list)
-    load_objects(PriceData, data, prices, "product")
 
     # Check if any data was loaded
-    if not prices:
+    if len(data) == 0:
         print("No price data found for analysis")
         return
 
@@ -282,7 +278,7 @@ def _analyze_price_data(
     _, axes, ax_master = _make_plots(
             f"Price Data Analysis for {filename}",
             4,
-            len(prices.items()),
+            len(set(data["product"])),
             denoised
             )
 
@@ -297,22 +293,31 @@ def _analyze_price_data(
     fair_value_master_artists = []
 
     # Render each individual price item in a subplot
-    for plot, (symbol, price_list) in enumerate(prices.items()):
+    for plot, symbol in enumerate(sorted(set(data["product"]))):
+        mask = symbol == data["product"]
         # Set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
         axes[2, plot].set_xlabel("Timestamp")  # type: ignore
-        timestamps = [price.timestamp for price in price_list]
+
+        nonzero_bids = data["bid_volume_1"] + data["bid_volume_2"] + data["bid_volume_3"] > 0
+        nonzero_asks = data["ask_volume_1"] + data["ask_volume_2"] + data["ask_volume_3"] > 0
+        # No mid volume, so just check the price to see if information is available
+        nonzero_fair_value = data["mid_price"] > 0
+
+        bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
+        ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
+        fair_value_timestamps = data.loc[mask & nonzero_fair_value, "timestamp"].to_list()
 
         # Plot the bid/ask/fair value price data
-        bid_prices = denoiser([price.bid_price for price in price_list])
-        ask_prices = denoiser([price.ask_price for price in price_list])
-        fair_value_prices = denoiser([price.mid_price for price in price_list])
+        bid_prices = data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1)
+        ask_prices = data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1)
+        fair_value_prices = data.loc[mask & nonzero_fair_value, "mid_price"].to_list()
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
             title=f"Bid/Ask Prices{' (denoised)' if denoised else ''}",
             title_color="green",
-            timestamps=timestamps,
+            timestamps=bid_timestamps,
             data=bid_prices,
             data_label="bid",
             data_color="green",
@@ -321,7 +326,7 @@ def _analyze_price_data(
             )
         _plot_data(
             axis=axes[0, plot],  # type: ignore
-            timestamps=timestamps,
+            timestamps=ask_timestamps,
             data=ask_prices,
             data_label="ask",
             data_color="red",
@@ -330,7 +335,7 @@ def _analyze_price_data(
             )
         _plot_data(
             axis=axes[0, plot],  # type: ignore
-            timestamps=timestamps,
+            timestamps=fair_value_timestamps,
             data=fair_value_prices,
             data_label="fair value",
             data_color="blue",
@@ -339,13 +344,13 @@ def _analyze_price_data(
             )
 
         # Plot the bid quantity data
-        bid_volumes = denoiser([price.bid_volume for price in price_list])
+        bid_volumes = denoiser(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
             title=f"Bid Volume{' (denoised)' if denoised else ''}",
             title_color="blue",
-            timestamps=timestamps,
+            timestamps=bid_timestamps,
             data=bid_volumes,
             data_label="bid",
             data_color="blue",
@@ -353,13 +358,13 @@ def _analyze_price_data(
             )
 
         # Plot the ask quantity data
-        ask_volumes = denoiser([price.ask_volume for price in price_list])
+        ask_volumes = denoiser(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
             title=f"Ask Volume{' (denoised)' if denoised else ''}",
             title_color="orange",
-            timestamps=timestamps,
+            timestamps=ask_timestamps,
             data=ask_volumes,
             data_label="ask",
             data_color="orange",
@@ -369,7 +374,7 @@ def _analyze_price_data(
         # Plot the bid/ask/fair value price on the master plot
         bid_master_artists.extend(
                 ax_master.plot(
-                    timestamps,
+                    bid_timestamps,
                     bid_prices,
                     linewidth=0.8,
                     label=f"{symbol} bid",
@@ -378,7 +383,7 @@ def _analyze_price_data(
             )
         ask_master_artists.extend(
                 ax_master.plot(
-                    timestamps,
+                    ask_timestamps,
                     ask_prices,
                     linewidth=0.8,
                     label=f"{symbol} ask",
@@ -387,7 +392,7 @@ def _analyze_price_data(
             )
         fair_value_master_artists.extend(
                 ax_master.plot(
-                    timestamps,
+                    fair_value_timestamps,
                     fair_value_prices,
                     linewidth=0.8,
                     label=f"{symbol} fair value",
