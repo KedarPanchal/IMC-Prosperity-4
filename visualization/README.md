@@ -64,7 +64,10 @@ uv run visualization.py analysis -f path/to/file1.csv path/to/file2.csv
 Notes:
 
 - The CSVs are expected to be **semicolon-separated** (`;`) (this is how IMC Prosperity exports are typically formatted).
-- The program will open **one interactive window per file**. Close the current window to move to the next file.
+- The tool **collates the files you pass into a single visualization per data type**:
+  - All trade-style CSVs you provide are combined into one trade figure.
+  - All price/orderbook-style CSVs you provide are combined into one price figure.
+  - If you pass a mix of both types, you’ll typically see **two windows total** (one trade, one price).
 - Files must be passed via `--files` / `-f` (positional file arguments are not supported).
 
 ```bash
@@ -74,6 +77,7 @@ uv run visualization.py analysis --files path/to/file1.csv path/to/file2.csv
 - If a file looks “wrong”, it may be the other dataset type. The program decides which view to show based on the columns it finds:
   - Trade-style CSVs (it detects a `buyer` column) show price + quantity per symbol, plus a combined “master” price plot.
   - Price/orderbook-style CSVs (it detects a `profit_and_loss` column) show bid/ask/fair value and volumes, plus a combined “master” plot.
+- If you pass multiple days of data, the tool expects filenames to include a day marker like `day_0`, `day_1`, etc. It uses that to offset timestamps so days plot in chronological order.
 
 ## Optional: denoise for feature extraction and trend analysis
 
@@ -111,7 +115,7 @@ There is also a clustering-based helper to group “bots” based on trading beh
 It expects **matching trade + price CSVs** for the same day(s):
 
 - Trade logs (filenames typically contain `trades`) provide executed trades (e.g., `buyer`, `seller`, `price`, `quantity`).
-- Price/orderbook logs (filenames typically contain `prices`) provide mid-price/market state (e.g., `mid_price`).
+- Price/orderbook logs (filenames typically contain `prices`) provide the market state (including `mid_price`).
 
 The classifier also expects the filenames to include a day marker like `day_0`, `day_1`, etc., so it can line up days correctly.
 
@@ -131,6 +135,11 @@ Run:
 uv run visualization.py classification -f path/to/day_0_trades.csv path/to/day_0_prices.csv
 ```
 
+Notes:
+
+- You must provide the **same set of days** for trades and prices. If you pass trades for 2 days but prices for only 1 day (or vice versa), the classifier will stop with an error.
+- If a file is missing a `day_#` marker in its name, it will be skipped.
+
 Tune cluster count (default \(k=10\)):
 
 ```bash
@@ -143,3 +152,4 @@ uv run visualization.py classification -f path/to/day_0_trades.csv path/to/day_0
 - If nothing shows up: make sure the window isn’t opening behind other windows; also confirm you’re running from the `visualization` folder.
 - If the chart looks empty or says it found no data: you may have provided a CSV with unexpected columns/formatting.
 - If you see “Unknown data being analyzed”: the CSV didn’t match the expected schemas (trade files need a `buyer` column; price/orderbook files need a `profit_and_loss` column).
+- If `classification` says it processed a different number of trade vs price files: make sure you passed a **matching trades+prices pair for every day**, and that each filename contains `day_#`.

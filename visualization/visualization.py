@@ -50,6 +50,14 @@ def main():
             default=2,
             help="The number of denoising passes to perform"
             )
+    analysis_parser.add_argument(
+            "--alpha",
+            "-a",
+            dest="alpha",
+            type=float,
+            default=0.5,
+            help="The alpha value to compute the exponential moving average for the EMA denoising strategy"
+            )
 
     classification_parser = subparser.add_parser(
             "classification",
@@ -79,11 +87,11 @@ def main():
             parser.error(f"Unknown file: {file}")
 
     if args.command == "analysis":
-        for file in files:
-            analyze_data(
-                file,
-                args.strategy,
-                args.passes
+        analyze_data(
+            files,
+            args.strategy,
+            args.passes,
+            args.alpha
             )
     elif args.command == "classification":
         # Placeholder for classification logic

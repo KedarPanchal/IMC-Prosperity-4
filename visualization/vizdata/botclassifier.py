@@ -59,6 +59,10 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             )
         return None
 
+    if len(trade_dataframes) == 0:
+        print("Error: No valid trade or price dataframes to process")
+        return None
+
     trade_dataframes = dict(sorted(trade_dataframes.items()))
     price_dataframes = dict(sorted(price_dataframes.items()))
 
@@ -68,8 +72,8 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     # across days.
     # Since trades and prices should have the same days, we can also check that
     # the same days are present in both dictionaries.
-    trade_master = pd.DataFrame()
-    price_master = pd.DataFrame()
+    trade_master_list = []
+    price_master_list = []
     for i, day in enumerate(trade_dataframes.keys()):
         if day not in price_dataframes:
             print(f"Error: Day {day} is present in trade dataframes but not "
@@ -77,15 +81,12 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             return None
 
         trade_dataframes[day]["timestamp"] += i * 1_000_000
-        trade_master = pd.concat(
-                [trade_master, trade_dataframes[day]],
-                ignore_index=True
-                )
+        trade_master_list.append(trade_dataframes[day])
         price_dataframes[day]["timestamp"] += i * 1_000_000
-        price_master = pd.concat(
-                [price_master, price_dataframes[day]],
-                ignore_index=True
-                )
+        price_master_list.append(price_dataframes[day])
+
+    trade_master = pd.concat(trade_master_list, ignore_index=True)
+    price_master = pd.concat(price_master_list, ignore_index=True)
 
     # Aggregate data by timestep and symbol as an outer join to ensure all
     # timesteps are included, even if they only appear in one of the
@@ -138,7 +139,6 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                     }, index=["timestamp_start"]),
                 )
 
-    final_dataframe = pd.DataFrame()
     final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
     return final_dataframe.set_index("timestamp_start")
 

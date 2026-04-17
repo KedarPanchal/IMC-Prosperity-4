@@ -5,7 +5,7 @@ denoising.
 from typing import Callable, Any
 from collections import defaultdict
 
-import os
+import re
 
 import pandas as pd
 
@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import mplcursors
 
 from vizdata.denoise import DENOISING_STRATEGIES, not_identity
-from vizdata.datamodels import TradeData, PriceData, load_objects
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
@@ -63,7 +62,7 @@ def _plot_data(
         data: list[int | float],
         data_label: str,
         data_color: str,
-        artists: list,
+        artists: list | None = None,
         axis_color: str | None = None,
         title: str | None = None,
         title_color: str | None = None,
@@ -99,7 +98,8 @@ def _plot_data(
         color=data_color,
         picker=8
     )
-    artists.extend(plot)
+    if artists is not None:
+        artists.extend(plot)
 
     if axis_color:
         axis.tick_params(axis="y", labelcolor=axis_color)
@@ -113,7 +113,6 @@ def _plot_data(
 
 def _analyze_trade_data(
         data: pd.DataFrame,
-        filename: str,
         denoiser: Callable[[list[int | float]], list[int | float]]
         ):
     """Plot per-symbol trade price and quantity, plus a combined price view.
@@ -129,11 +128,8 @@ def _analyze_trade_data(
     Returns:
         None. Prints a message and returns early if there are no rows.
     """
-    trades = defaultdict(list)
-    load_objects(TradeData, data, trades, "symbol")
-
     # Check if any data was loaded
-    if not trades:
+    if len(data) == 0:
         print("No trade data found for analysis")
         return
 
@@ -144,9 +140,9 @@ def _analyze_trade_data(
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
     _, axes, ax_master = _make_plots(
-            f"Trade Data Analysis for {filename}",
+            "Trade Data Analysis",
             3,
-            len(trades.items()),
+            len(set(data["symbol"])),
             denoised
             )
 
@@ -156,14 +152,15 @@ def _analyze_trade_data(
     master_artists = []
 
     # render each individual trade item in a subplot
-    for plot, (symbol, trade_list) in enumerate(trades.items()):
+    for plot, symbol in enumerate(sorted(set(data["symbol"]))):
+        mask = data["symbol"] == symbol
         # set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
         axes[1, plot].set_xlabel("Timestamp")  # type: ignore
-        timestamps = [trade.timestamp for trade in trade_list]
+        timestamps = data.loc[mask, "timestamp"].to_list()
 
         # plot the trade data
-        prices = denoiser([trade.price for trade in trade_list])
+        prices = denoiser(data.loc[mask, "price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -177,7 +174,7 @@ def _analyze_trade_data(
             )
 
         # plot the quantity data
-        quantities = denoiser([trade.quantity for trade in trade_list])
+        quantities = denoiser(data.loc[mask, "quantity"].to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
@@ -250,7 +247,7 @@ def _analyze_trade_data(
 
 def _analyze_price_data(
         data: pd.DataFrame,
-        filename: str,
+        alpha: float,
         denoiser: Callable[[list[int | float]], list[int | float]]
         ):
     """Plot per-product bid/ask/fair price and volumes, plus combined price
@@ -267,11 +264,9 @@ def _analyze_price_data(
     Returns:
         None. Prints a message and returns early if there are no rows.
     """
-    prices = defaultdict(list)
-    load_objects(PriceData, data, prices, "product")
 
     # Check if any data was loaded
-    if not prices:
+    if len(data) == 0:
         print("No price data found for analysis")
         return
 
@@ -282,39 +277,66 @@ def _analyze_price_data(
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
     _, axes, ax_master = _make_plots(
-            f"Price Data Analysis for {filename}",
+            "Price Data Analysis",
             4,
-            len(prices.items()),
+            len(set(data["product"])),
             denoised
             )
 
     # Create arrays to store each artist for rendering the cursors
     bid_price_artists = []
     ask_price_artists = []
-    fair_value_artists = []
+    mid_artists = []
     bid_quantity_artists = []
     ask_quantity_artists = []
     bid_master_artists = []
     ask_master_artists = []
-    fair_value_master_artists = []
+    mid_master_artists = []
+
+    # Compute masks for rows with nonzero bid/ask volumes and mid price
+    # Avoid plotting zero values to reduce noise
+    nonzero_bids = pd.notna(
+            data["bid_volume_1"] +
+            data["bid_volume_2"] +
+            data["bid_volume_3"]
+            ) & (
+            data["bid_volume_1"] +
+            data["bid_volume_2"] +
+            data["bid_volume_3"] > 0
+            )
+    nonzero_asks = pd.notna(
+            data["ask_volume_1"] +
+            data["ask_volume_2"] +
+            data["ask_volume_3"]
+            ) & (
+                data["ask_volume_1"] +
+                data["ask_volume_2"] +
+                data["ask_volume_3"] > 0
+                )
+    # No mid volume, so check the price to see if information is available
+    nonzero_mid = data["mid_price"] > 0
 
     # Render each individual price item in a subplot
-    for plot, (symbol, price_list) in enumerate(prices.items()):
+    for plot, symbol in enumerate(sorted(set(data["product"]))):
+        mask = symbol == data["product"]
         # Set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
         axes[2, plot].set_xlabel("Timestamp")  # type: ignore
-        timestamps = [price.timestamp for price in price_list]
+
+        bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
+        ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
+        mid_timestamps = data.loc[mask & nonzero_mid, "timestamp"].to_list()
 
         # Plot the bid/ask/fair value price data
-        bid_prices = denoiser([price.bid_price for price in price_list])
-        ask_prices = denoiser([price.ask_price for price in price_list])
-        fair_value_prices = denoiser([price.mid_price for price in price_list])
+        bid_prices = denoiser(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
+        ask_prices = denoiser(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
+        mid_prices = denoiser(data.loc[mask & nonzero_mid, "mid_price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
             title=f"Bid/Ask Prices{' (denoised)' if denoised else ''}",
             title_color="green",
-            timestamps=timestamps,
+            timestamps=bid_timestamps,
             data=bid_prices,
             data_label="bid",
             data_color="green",
@@ -323,7 +345,7 @@ def _analyze_price_data(
             )
         _plot_data(
             axis=axes[0, plot],  # type: ignore
-            timestamps=timestamps,
+            timestamps=ask_timestamps,
             data=ask_prices,
             data_label="ask",
             data_color="red",
@@ -332,22 +354,34 @@ def _analyze_price_data(
             )
         _plot_data(
             axis=axes[0, plot],  # type: ignore
-            timestamps=timestamps,
-            data=fair_value_prices,
+            timestamps=mid_timestamps,
+            data=mid_prices,
             data_label="fair value",
             data_color="blue",
-            artists=fair_value_artists,
+            artists=mid_artists,
             show_legend=True
             )
 
+        # Plot EMA only if the denoising strategy is identity
+        if not denoised:
+            ema_prices = data.loc[mask & nonzero_mid, "mid_price"].ewm(alpha=alpha).mean().to_list()
+            _plot_data(
+                axis=axes[0, plot],  # type: ignore
+                timestamps=mid_timestamps,
+                data=ema_prices,
+                data_label=f"EMA (alpha={alpha})",
+                data_color="yellow",
+                show_legend=True
+                )
+
         # Plot the bid quantity data
-        bid_volumes = denoiser([price.bid_volume for price in price_list])
+        bid_volumes = denoiser(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
             title=f"Bid Volume{' (denoised)' if denoised else ''}",
             title_color="blue",
-            timestamps=timestamps,
+            timestamps=bid_timestamps,
             data=bid_volumes,
             data_label="bid",
             data_color="blue",
@@ -355,13 +389,13 @@ def _analyze_price_data(
             )
 
         # Plot the ask quantity data
-        ask_volumes = denoiser([price.ask_volume for price in price_list])
+        ask_volumes = denoiser(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
             title=f"Ask Volume{' (denoised)' if denoised else ''}",
             title_color="orange",
-            timestamps=timestamps,
+            timestamps=ask_timestamps,
             data=ask_volumes,
             data_label="ask",
             data_color="orange",
@@ -371,7 +405,7 @@ def _analyze_price_data(
         # Plot the bid/ask/fair value price on the master plot
         bid_master_artists.extend(
                 ax_master.plot(
-                    timestamps,
+                    bid_timestamps,
                     bid_prices,
                     linewidth=0.8,
                     label=f"{symbol} bid",
@@ -380,17 +414,17 @@ def _analyze_price_data(
             )
         ask_master_artists.extend(
                 ax_master.plot(
-                    timestamps,
+                    ask_timestamps,
                     ask_prices,
                     linewidth=0.8,
                     label=f"{symbol} ask",
                     picker=8
                 )
             )
-        fair_value_master_artists.extend(
+        mid_master_artists.extend(
                 ax_master.plot(
-                    timestamps,
-                    fair_value_prices,
+                    mid_timestamps,
+                    mid_prices,
                     linewidth=0.8,
                     label=f"{symbol} fair value",
                     color="blue",
@@ -400,7 +434,7 @@ def _analyze_price_data(
 
     # Create cursor for the price plot
     price_cursor = mplcursors.cursor(
-            [*bid_price_artists, *ask_price_artists, *fair_value_artists],
+            [*bid_price_artists, *ask_price_artists, *mid_artists],
             hover=mplcursors.HoverMode.Transient
             )
 
@@ -447,7 +481,7 @@ def _analyze_price_data(
             [
                 *bid_master_artists,
                 *ask_master_artists,
-                *fair_value_master_artists,
+                *mid_master_artists,
                 ],
             hover=mplcursors.HoverMode.Transient
             )
@@ -476,7 +510,12 @@ def _analyze_price_data(
     plt.show()
 
 
-def analyze_data(file_path: str, strategy: str, passes: int):
+def analyze_data(
+        file_paths: list[str],
+        strategy: str,
+        passes: int,
+        alpha: float
+        ):
     """Load a semicolon-separated CSV and dispatch to trade or price
     visualization.
 
@@ -493,17 +532,48 @@ def analyze_data(file_path: str, strategy: str, passes: int):
     Returns:
         None.
     """
-    # Read the pandas data
-    data = pd.read_csv(file_path, sep=';')
+
+    trade_paths = defaultdict(pd.DataFrame)
+    price_paths = defaultdict(pd.DataFrame)
+    day_regex = re.compile(r"(?<=day_)-?\d+")
+
+    for file_path in file_paths:
+        data = pd.read_csv(file_path, sep=';')
+        match = day_regex.search(file_path)
+        if not match:
+            print(f"Warning: File {file_path} does not contain a valid day number")
+            continue
+        day = int(match.group())
+        if "buyer" in data.columns:
+            trade_paths[day] = data
+        elif "profit_and_loss" in data.columns:
+            price_paths[day] = data
+        else:
+            print(f"Warning: File {file_path} is not a valid trade or price data file")
 
     # Determine the appropriate denoising function based on the strategy
-    denoise = DENOISING_STRATEGIES[strategy](passes)
+    try:
+        denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
+    except ValueError as e:
+        print(f"Error: {e}. Defaulting to no denoising.")
+        denoise = DENOISING_STRATEGIES["identity"](passes, alpha)
 
-    if "buyer" in data.columns:
-        _analyze_trade_data(data, os.path.basename(file_path), denoise)
-    elif "profit_and_loss" in data.columns:
-        _analyze_price_data(data, os.path.basename(file_path), denoise)
-    else:
-        print("Unknown data being analyzed")
+    if len(trade_paths) > 0:
+        # Offset timestamps by day to ensure they are plotted chronologically
+        for i, day in enumerate(sorted(set(trade_paths.keys()))):
+            trade_paths[day]["timestamp"] += i * 1_000_000
 
+        trade_data = pd.concat(trade_paths.values(), ignore_index=True).sort_values("timestamp")
+        _analyze_trade_data(trade_data, denoise)
 
+    if len(price_paths) > 0:
+        # Offset timestamps by day to ensure they are plotted chronologically
+        for i, day in enumerate(sorted(set(price_paths.keys()))):
+            price_paths[day]["timestamp"] += i * 1_000_000
+
+        price_data = pd.concat(price_paths.values(), ignore_index=True).sort_values("timestamp")
+
+        _analyze_price_data(price_data, alpha, denoise)
+
+    if len(trade_paths) == 0 and len(price_paths) == 0:
+        print("No valid trade or price data found for analysis")
