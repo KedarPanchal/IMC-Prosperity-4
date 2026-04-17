@@ -106,18 +106,35 @@ Impact of changing `--passes`:
 
 ## Run: bot clustering (`classification`)
 
-There is also a clustering-based helper to group “bots” based on trade behavior. It expects **trade-style CSVs** (i.e., files with a `buyer` column).
+There is also a clustering-based helper to group “bots” based on trading behavior using k-means clustering.
+
+It expects **matching trade + price CSVs** for the same day(s):
+
+- Trade logs (filenames typically contain `trades`) provide executed trades (e.g., `buyer`, `seller`, `price`, `quantity`).
+- Price/orderbook logs (filenames typically contain `prices`) provide mid-price/market state (e.g., `mid_price`).
+
+The classifier also expects the filenames to include a day marker like `day_0`, `day_1`, etc., so it can line up days correctly.
+
+### What the clustering “looks at”
+
+The clustering is based on simple behavior features computed per symbol over short time buckets, including:
+
+- **Price shape**: open/close, high/low, return, and range (from `mid_price`)
+- **Activity**: total traded volume, number of trades, and average trade size
+- **Symbol exposure**: which products were being traded (one-hot encoded)
+
+Before clustering, the features are standardized (so different scales don’t dominate), reduced to 2D with PCA for visualization, and then grouped using k-means.
 
 Run:
 
 ```bash
-uv run visualization.py classification -f path/to/trades1.csv path/to/trades2.csv
+uv run visualization.py classification -f path/to/day_0_trades.csv path/to/day_0_prices.csv
 ```
 
 Tune cluster count (default \(k=10\)):
 
 ```bash
-uv run visualization.py classification -f path/to/trades.csv --clusters 15
+uv run visualization.py classification -f path/to/day_0_trades.csv path/to/day_0_prices.csv --clusters 15
 ```
 
 ## Troubleshooting
