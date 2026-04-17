@@ -32,7 +32,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     # Split dataframes into trade and price dataframes by day
     trade_dataframes = defaultdict(pd.DataFrame)
     price_dataframes = defaultdict(pd.DataFrame)
-    day_regex = re.compile(r"(?<=day_)[-\d]{1,2}")
+    day_regex = re.compile(r"(?<=day_)-?\d+")
 
     for file in files:
         df = pd.read_csv(file, sep=';')
