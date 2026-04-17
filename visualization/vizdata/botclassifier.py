@@ -120,7 +120,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             midprice_close = curr.iloc[-1]["mid_price"]  # type: ignore
             midprice_low = curr["mid_price"].min()
             midprice_high = curr["mid_price"].max()
-            avg_trade_size = curr["quantity"].mean()
+            avg_trade_size = curr.loc[curr["quantity"] > 0, "quantity"].mean()  # type: ignore
             final_dataframe = pd.concat(
                 [
                     final_dataframe,
@@ -135,7 +135,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                         "midprice_return": midprice_close / midprice_open - 1,
                         "midprice_range": midprice_high - midprice_low,
                         "total_volume": curr["quantity"].sum(),
-                        "num_trades": len(curr["quantity"]),  # Trade exclusive
+                        "num_trades": len(curr.loc[curr["quantity"] > 0, "quantity"]),  # type: ignore
                         "avg_trade_size": avg_trade_size if pd.notna(avg_trade_size) else 0  # type: ignore
                     }, index=["timestamp_start"]),
                     ],
