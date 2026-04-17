@@ -226,14 +226,14 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
         0.82,
         0.55,
         "PCA Component 1 Composition:\n\n" +
-        '\n'.join(f"{COL_NAMES[col]}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
+        '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
         )
     fig.text(
         0.82,
         0.225,
         "PCA Component 2 Composition:\n\n" +
-        '\n'.join(f"{COL_NAMES[col]}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
+        '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
         )
 
@@ -246,7 +246,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
         local_data[numeric_columns] = local_data[numeric_columns].round(4)
         sel.annotation.set_text(
             f"Start Timestamp: {local_data.index[0]}\n" +
-            '\n'.join(f"{COL_NAMES[col]}: {local_data[col].iloc[0]}" for col in dropped.columns) +
+            '\n'.join(f"{COL_NAMES.get(col, col)}: {local_data[col].iloc[0]}" for col in dropped.columns) +
             f"\nCluster: {kmeans.labels_[index]}"  # type: ignore
             )
         sel.annotation.get_bbox_patch().set_alpha(0.95)
