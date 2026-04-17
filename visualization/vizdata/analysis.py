@@ -295,19 +295,26 @@ def _analyze_price_data(
 
     # Compute masks for rows with nonzero bid/ask volumes and mid price
     # Avoid plotting zero values to reduce noise
-    nonzero_bids = (
+    nonzero_bids = pd.notna(
+            data["bid_volume_1"] +
+            data["bid_volume_2"] +
+            data["bid_volume_3"]
+            ) & (
             data["bid_volume_1"] +
             data["bid_volume_2"] +
             data["bid_volume_3"] > 0
             )
-    nonzero_asks = (
+    nonzero_asks = pd.notna(
+            data["ask_volume_1"] +
+            data["ask_volume_2"] +
+            data["ask_volume_3"]
+            ) & (
                 data["ask_volume_1"] +
                 data["ask_volume_2"] +
                 data["ask_volume_3"] > 0
                 )
     # No mid volume, so check the price to see if information is available
     nonzero_mid = data["mid_price"] > 0
-
 
     # Render each individual price item in a subplot
     for plot, symbol in enumerate(sorted(set(data["product"]))):
