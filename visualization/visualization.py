@@ -56,7 +56,7 @@ def main():
             dest="alpha",
             type=float,
             default=0.5,
-            help="The alpha value to compute the exponential moving average of the fair value price"
+            help="The alpha value to compute the exponential moving average for the EMA denoising strategy"
             )
 
     classification_parser = subparser.add_parser(
