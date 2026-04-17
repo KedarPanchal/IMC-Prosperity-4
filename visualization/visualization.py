@@ -79,11 +79,10 @@ def main():
             parser.error(f"Unknown file: {file}")
 
     if args.command == "analysis":
-        for file in files:
-            analyze_data(
-                file,
-                args.strategy,
-                args.passes
+        analyze_data(
+            files,
+            args.strategy,
+            args.passes
             )
     elif args.command == "classification":
         # Placeholder for classification logic

@@ -3,8 +3,10 @@ denoising.
 """
 
 from typing import Callable, Any
+from collections import defaultdict
 
 import os
+import re
 
 import pandas as pd
 
@@ -479,7 +481,7 @@ def _analyze_price_data(
     plt.show()
 
 
-def analyze_data(file_path: str, strategy: str, passes: int):
+def analyze_data(file_paths: list[str], strategy: str, passes: int):
     """Load a semicolon-separated CSV and dispatch to trade or price
     visualization.
 
@@ -496,17 +498,44 @@ def analyze_data(file_path: str, strategy: str, passes: int):
     Returns:
         None.
     """
-    # Read the pandas data
-    data = pd.read_csv(file_path, sep=';')
+
+    trade_paths = defaultdict(pd.DataFrame)
+    price_paths = defaultdict(pd.DataFrame)
+    day_regex = re.compile(r"(?<=day_)-?\d+")
+
+    for file_path in file_paths:
+        data = pd.read_csv(file_path, sep=';')
+        match = day_regex.search(file_path)
+        if not match:
+            print(f"Warning: File {file_path} does not contain a valid day number")
+            continue
+        day = int(match.group())
+        if "buyer" in data.columns:
+            trade_paths[day] = data
+        elif "profit_and_loss" in data.columns:
+            price_paths[day] = data
+        else:
+            print(f"Warning: File {file_path} is not a valid trade or price data file")
 
     # Determine the appropriate denoising function based on the strategy
     denoise = DENOISING_STRATEGIES[strategy](passes)
 
-    if "buyer" in data.columns:
-        _analyze_trade_data(data, os.path.basename(file_path), denoise)
-    elif "profit_and_loss" in data.columns:
-        _analyze_price_data(data, os.path.basename(file_path), denoise)
-    else:
-        print("Unknown data being analyzed")
+    if len(trade_paths) > 0:
+        # Offset timestamps by day to ensure they are plotted in chronological order without overlap
+        for i, day in enumerate(sorted(set(trade_paths.keys()))):
+            trade_paths[day]["timestamp"] += i * 1_000_000
 
+        trade_data = pd.concat(trade_paths.values(), ignore_index=True).sort_values("timestamp")
+        _analyze_trade_data(trade_data, "trade data", denoise)
 
+    if len(price_paths) > 0:
+        # Offset timestamps by day to ensure they are plotted in chronological order without overlap
+        for i, day in enumerate(sorted(set(price_paths.keys()))):
+            price_paths[day]["timestamp"] += i * 1_000_000
+
+        price_data = pd.concat(price_paths.values(), ignore_index=True).sort_values("timestamp")
+
+        _analyze_price_data(price_data, "price data", denoise)
+
+    if len(trade_paths) == 0 and len(price_paths) == 0:
+        print("No valid trade or price data found for analysis")
