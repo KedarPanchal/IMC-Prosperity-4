@@ -101,7 +101,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
 
     # Timesteps have a difference of about 2k between them
     # This means in the final dataframe, aggregate data in steps of 2k
-    final_dataframe = pd.DataFrame()
+    final_dataframe_components = []
     for i in range(0, final_timestep + 1, 2000):
         timestamped = master[
                 (master["timestamp"] >= i) & (master["timestamp"] < i + 2000)
@@ -121,9 +121,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             midprice_low = curr["mid_price"].min()
             midprice_high = curr["mid_price"].max()
             avg_trade_size = curr.loc[curr["quantity"] > 0, "quantity"].mean()  # type: ignore
-            final_dataframe = pd.concat(
-                [
-                    final_dataframe,
+            final_dataframe_components.append(
                     pd.DataFrame({
                         "timestamp_start": i,
                         "timestamp_end": i + 1999,  # Inclusive end timestamp
@@ -138,10 +136,10 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                         "num_trades": len(curr.loc[curr["quantity"] > 0, "quantity"]),  # type: ignore
                         "avg_trade_size": avg_trade_size if pd.notna(avg_trade_size) else 0  # type: ignore
                     }, index=["timestamp_start"]),
-                    ],
-                ignore_index=True
                 )
 
+    final_dataframe = pd.DataFrame()
+    final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
     return final_dataframe.set_index("timestamp_start")
 
 
