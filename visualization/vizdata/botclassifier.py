@@ -187,15 +187,16 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             s=10,
             picker=8
             )
-    voronoi = Voronoi(kmeans.cluster_centers_)
-    fig = voronoi_plot_2d(
-            voronoi,
-            ax=axes,
-            show_vertices=False,
-            show_points=False,
-            line_colors='k',
-            line_width=1,
-            )
+    if len(kmeans.cluster_centers_) >= 2:
+        voronoi = Voronoi(kmeans.cluster_centers_)
+        voronoi_plot_2d(
+                voronoi,
+                ax=axes,
+                show_vertices=False,
+                show_points=False,
+                line_colors='k',
+                line_width=1,
+                )
     axes.set_xlabel("PCA Component 1")
     axes.set_ylabel("PCA Component 2")
     axes.set_title("K-Means Clustering of Trading Bots")
