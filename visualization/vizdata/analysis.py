@@ -287,12 +287,12 @@ def _analyze_price_data(
     # Create arrays to store each artist for rendering the cursors
     bid_price_artists = []
     ask_price_artists = []
-    fair_value_artists = []
+    mid_artists = []
     bid_quantity_artists = []
     ask_quantity_artists = []
     bid_master_artists = []
     ask_master_artists = []
-    fair_value_master_artists = []
+    mid_master_artists = []
 
     # Render each individual price item in a subplot
     for plot, symbol in enumerate(sorted(set(data["product"]))):
@@ -301,19 +301,27 @@ def _analyze_price_data(
         axes[0, plot].set_title(symbol)  # type: ignore
         axes[2, plot].set_xlabel("Timestamp")  # type: ignore
 
-        nonzero_bids = data["bid_volume_1"] + data["bid_volume_2"] + data["bid_volume_3"] > 0
-        nonzero_asks = data["ask_volume_1"] + data["ask_volume_2"] + data["ask_volume_3"] > 0
-        # No mid volume, so just check the price to see if information is available
-        nonzero_fair_value = data["mid_price"] > 0
+        nonzero_bids = (
+            data["bid_volume_1"] +
+            data["bid_volume_2"] +
+            data["bid_volume_3"] > 0
+            )
+        nonzero_asks = (
+                data["ask_volume_1"] +
+                data["ask_volume_2"] +
+                data["ask_volume_3"] > 0
+                )
+        # No mid volume, so check the price to see if information is available
+        nonzero_mid = data["mid_price"] > 0
 
         bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
         ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
-        fair_value_timestamps = data.loc[mask & nonzero_fair_value, "timestamp"].to_list()
+        mid_timestamps = data.loc[mask & nonzero_mid, "timestamp"].to_list()
 
         # Plot the bid/ask/fair value price data
         bid_prices = denoiser(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
         ask_prices = denoiser(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
-        fair_value_prices = denoiser(data.loc[mask & nonzero_fair_value, "mid_price"].to_list())
+        mid_prices = denoiser(data.loc[mask & nonzero_mid, "mid_price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -337,20 +345,20 @@ def _analyze_price_data(
             )
         _plot_data(
             axis=axes[0, plot],  # type: ignore
-            timestamps=fair_value_timestamps,
-            data=fair_value_prices,
+            timestamps=mid_timestamps,
+            data=mid_prices,
             data_label="fair value",
             data_color="blue",
-            artists=fair_value_artists,
+            artists=mid_artists,
             show_legend=True
             )
 
         # Plot EMA only if the denoising strategy is identity
         if not denoised:
-            ema_prices = data.loc[mask & nonzero_fair_value, "mid_price"].ewm(alpha=alpha).mean().to_list()
+            ema_prices = data.loc[mask & nonzero_mid, "mid_price"].ewm(alpha=alpha).mean().to_list()
             _plot_data(
                 axis=axes[0, plot],  # type: ignore
-                timestamps=fair_value_timestamps,
+                timestamps=mid_timestamps,
                 data=ema_prices,
                 data_label=f"EMA (alpha={alpha})",
                 data_color="yellow",
@@ -404,10 +412,10 @@ def _analyze_price_data(
                     picker=8
                 )
             )
-        fair_value_master_artists.extend(
+        mid_master_artists.extend(
                 ax_master.plot(
-                    fair_value_timestamps,
-                    fair_value_prices,
+                    mid_timestamps,
+                    mid_prices,
                     linewidth=0.8,
                     label=f"{symbol} fair value",
                     color="blue",
@@ -417,7 +425,7 @@ def _analyze_price_data(
 
     # Create cursor for the price plot
     price_cursor = mplcursors.cursor(
-            [*bid_price_artists, *ask_price_artists, *fair_value_artists],
+            [*bid_price_artists, *ask_price_artists, *mid_artists],
             hover=mplcursors.HoverMode.Transient
             )
 
@@ -464,7 +472,7 @@ def _analyze_price_data(
             [
                 *bid_master_artists,
                 *ask_master_artists,
-                *fair_value_master_artists,
+                *mid_master_artists,
                 ],
             hover=mplcursors.HoverMode.Transient
             )
@@ -493,7 +501,12 @@ def _analyze_price_data(
     plt.show()
 
 
-def analyze_data(file_paths: list[str], strategy: str, passes: int, alpha: float):
+def analyze_data(
+        file_paths: list[str],
+        strategy: str,
+        passes: int,
+        alpha: float
+        ):
     """Load a semicolon-separated CSV and dispatch to trade or price
     visualization.
 
@@ -533,7 +546,7 @@ def analyze_data(file_paths: list[str], strategy: str, passes: int, alpha: float
     denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
 
     if len(trade_paths) > 0:
-        # Offset timestamps by day to ensure they are plotted in chronological order without overlap
+        # Offset timestamps by day to ensure they are plotted chronologically
         for i, day in enumerate(sorted(set(trade_paths.keys()))):
             trade_paths[day]["timestamp"] += i * 1_000_000
 
@@ -541,7 +554,7 @@ def analyze_data(file_paths: list[str], strategy: str, passes: int, alpha: float
         _analyze_trade_data(trade_data, denoise)
 
     if len(price_paths) > 0:
-        # Offset timestamps by day to ensure they are plotted in chronological order without overlap
+        # Offset timestamps by day to ensure they are plotted chronologically
         for i, day in enumerate(sorted(set(price_paths.keys()))):
             price_paths[day]["timestamp"] += i * 1_000_000
 
