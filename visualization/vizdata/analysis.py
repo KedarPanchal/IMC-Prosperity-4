@@ -5,7 +5,6 @@ denoising.
 from typing import Callable, Any
 from collections import defaultdict
 
-import os
 import re
 
 import pandas as pd
