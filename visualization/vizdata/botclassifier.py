@@ -59,6 +59,10 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
             )
         return None
 
+    if len(trade_dataframes) == 0:
+        print("Error: No valid trade or price dataframes to process")
+        return None
+
     trade_dataframes = dict(sorted(trade_dataframes.items()))
     price_dataframes = dict(sorted(price_dataframes.items()))
 
