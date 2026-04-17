@@ -50,6 +50,14 @@ def main():
             default=2,
             help="The number of denoising passes to perform"
             )
+    analysis_parser.add_argument(
+            "--alpha",
+            "-a",
+            dest="alpha",
+            type=float,
+            default=0.5,
+            help="The alpha value to compute the exponential moving average of the fair value price"
+            )
 
     classification_parser = subparser.add_parser(
             "classification",
@@ -82,7 +90,8 @@ def main():
         analyze_data(
             files,
             args.strategy,
-            args.passes
+            args.passes,
+            args.alpha
             )
     elif args.command == "classification":
         # Placeholder for classification logic

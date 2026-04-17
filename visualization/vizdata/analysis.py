@@ -63,7 +63,7 @@ def _plot_data(
         data: list[int | float],
         data_label: str,
         data_color: str,
-        artists: list,
+        artists: list | None = None,
         axis_color: str | None = None,
         title: str | None = None,
         title_color: str | None = None,
@@ -99,7 +99,8 @@ def _plot_data(
         color=data_color,
         picker=8
     )
-    artists.extend(plot)
+    if artists is not None:
+        artists.extend(plot)
 
     if axis_color:
         axis.tick_params(axis="y", labelcolor=axis_color)
@@ -247,6 +248,7 @@ def _analyze_trade_data(
 
 def _analyze_price_data(
         data: pd.DataFrame,
+        alpha: float,
         denoiser: Callable[[list[int | float]], list[int | float]]
         ):
     """Plot per-product bid/ask/fair price and volumes, plus combined price
@@ -342,6 +344,18 @@ def _analyze_price_data(
             artists=fair_value_artists,
             show_legend=True
             )
+
+        # Plot EMA only if the denoising strategy is identity
+        if not denoised:
+            ema_prices = data.loc[mask & nonzero_fair_value, "mid_price"].ewm(alpha=alpha).mean().to_list()
+            _plot_data(
+                axis=axes[0, plot],  # type: ignore
+                timestamps=fair_value_timestamps,
+                data=ema_prices,
+                data_label=f"EMA (alpha={alpha})",
+                data_color="yellow",
+                show_legend=True
+                )
 
         # Plot the bid quantity data
         bid_volumes = denoiser(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
@@ -479,7 +493,7 @@ def _analyze_price_data(
     plt.show()
 
 
-def analyze_data(file_paths: list[str], strategy: str, passes: int):
+def analyze_data(file_paths: list[str], strategy: str, passes: int, alpha: float):
     """Load a semicolon-separated CSV and dispatch to trade or price
     visualization.
 
@@ -516,7 +530,7 @@ def analyze_data(file_paths: list[str], strategy: str, passes: int):
             print(f"Warning: File {file_path} is not a valid trade or price data file")
 
     # Determine the appropriate denoising function based on the strategy
-    denoise = DENOISING_STRATEGIES[strategy](passes)
+    denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
 
     if len(trade_paths) > 0:
         # Offset timestamps by day to ensure they are plotted in chronological order without overlap
@@ -524,7 +538,7 @@ def analyze_data(file_paths: list[str], strategy: str, passes: int):
             trade_paths[day]["timestamp"] += i * 1_000_000
 
         trade_data = pd.concat(trade_paths.values(), ignore_index=True).sort_values("timestamp")
-        _analyze_trade_data(trade_data, "trade data", denoise)
+        _analyze_trade_data(trade_data, denoise)
 
     if len(price_paths) > 0:
         # Offset timestamps by day to ensure they are plotted in chronological order without overlap
@@ -533,7 +547,7 @@ def analyze_data(file_paths: list[str], strategy: str, passes: int):
 
         price_data = pd.concat(price_paths.values(), ignore_index=True).sort_values("timestamp")
 
-        _analyze_price_data(price_data, "price data", denoise)
+        _analyze_price_data(price_data, alpha, denoise)
 
     if len(trade_paths) == 0 and len(price_paths) == 0:
         print("No valid trade or price data found for analysis")

@@ -58,13 +58,15 @@ _SQRT2 = math.sqrt(2)
 
 # -- NON-FOURIER DENOISING STRATEGIES -----------------------------------------
 
-def identity_denoise(passes: int = 1):
+def identity_denoise(passes: int = 1, *args):
     """Return a function that performs no denoising and returns the input data
     as-is.
 
     Args:
         passes: Ignored; included for interface consistency with other
         denoising functions.
+        args: Ignored; included for interface consistency with other denoising
+        functions.
 
     Returns:
         A function that takes a list of numeric values and returns the same
@@ -84,13 +86,15 @@ def identity_denoise(passes: int = 1):
     return identity
 
 
-def haar_denoise(passes: int = 1):
+def haar_denoise(passes: int = 1, *args):
     """Return a function that applies a simple Haar wavelet transform to
     denoise a numeric series.
 
     Args:
         passes: The number of times to apply the Haar transform; more passes
         result in stronger denoising.
+        args: Ignored; included for interface consistency with other denoising
+        functions.
 
     Returns:
         A function that takes a list of numeric values and returns a denoised
@@ -152,6 +156,44 @@ def haar_denoise(passes: int = 1):
     return haar
 
 
+def exponential_moving_average_denoise(passes: int = 1, *args):
+    """Return a function that applies an exponential moving average to denoise
+    a numeric series.
+
+    Args:
+        passes: The number of times to apply the exponential moving average;
+        more passes result in stronger denoising.
+        args: Additional arguments for the exponential moving average function;
+        the first argument is expected to be the alpha value (smoothing factor)
+        to use for the moving average, with a default of 0.5 if not provided.
+
+    Returns:
+        A function that takes a list of numeric values and returns a denoised
+        list of the same length.
+    """
+    def ema(data: list[int | float]):
+        """Apply an exponential moving average to denoise a numeric series.
+
+        Args:
+            data: Sequence of numeric values.
+
+        Returns:
+            List of denoised values.
+        """
+        if len(data) == 0:
+            return data
+
+        smoothed = data[:]
+        a = args[0] if args else 0.5
+        for _ in range(passes):
+            for i in range(1, len(smoothed)):
+                smoothed[i] = a * smoothed[i] + (1 - a) * smoothed[i - 1]
+
+        return smoothed
+
+    return ema
+
+
 # -- FOURIER DENOISING STRATEGIES ---------------------------------------------
 
 
@@ -159,7 +201,8 @@ def haar_denoise(passes: int = 1):
 
 DENOISING_STRATEGIES = {
     "identity": identity_denoise,
-    "haar": haar_denoise
+    "haar": haar_denoise,
+    "ema": exponential_moving_average_denoise
 }
 
 
