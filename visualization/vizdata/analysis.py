@@ -309,9 +309,9 @@ def _analyze_price_data(
         fair_value_timestamps = data.loc[mask & nonzero_fair_value, "timestamp"].to_list()
 
         # Plot the bid/ask/fair value price data
-        bid_prices = data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1)
-        ask_prices = data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1)
-        fair_value_prices = data.loc[mask & nonzero_fair_value, "mid_price"].to_list()
+        bid_prices = denoiser(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1))
+        ask_prices = denoiser(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1))
+        fair_value_prices = denoiser(data.loc[mask & nonzero_fair_value, "mid_price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
