@@ -129,11 +129,8 @@ def _analyze_trade_data(
     Returns:
         None. Prints a message and returns early if there are no rows.
     """
-    trades = defaultdict(list)
-    load_objects(TradeData, data, trades, "symbol")
-
     # Check if any data was loaded
-    if not trades:
+    if len(data) == 0:
         print("No trade data found for analysis")
         return
 
@@ -146,7 +143,7 @@ def _analyze_trade_data(
     _, axes, ax_master = _make_plots(
             f"Trade Data Analysis for {filename}",
             3,
-            len(trades.items()),
+            len(set(data["symbol"])),
             denoised
             )
 
@@ -156,14 +153,15 @@ def _analyze_trade_data(
     master_artists = []
 
     # render each individual trade item in a subplot
-    for plot, (symbol, trade_list) in enumerate(trades.items()):
+    for plot, symbol in enumerate(sorted(set(data["symbol"]))):
+        mask = data["symbol"] == symbol
         # set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
         axes[1, plot].set_xlabel("Timestamp")  # type: ignore
-        timestamps = [trade.timestamp for trade in trade_list]
+        timestamps = data.loc[mask, "timestamp"].to_list()
 
         # plot the trade data
-        prices = denoiser([trade.price for trade in trade_list])
+        prices = denoiser(data.loc[mask, "price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
@@ -177,7 +175,7 @@ def _analyze_trade_data(
             )
 
         # plot the quantity data
-        quantities = denoiser([trade.quantity for trade in trade_list])
+        quantities = denoiser(data.loc[mask, "quantity"].to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
