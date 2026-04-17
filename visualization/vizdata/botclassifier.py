@@ -113,6 +113,9 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
                     (timestamped["symbol"] == symbol) &
                     (timestamped["mid_price"] > 0)
                     ]
+            if curr.empty:  # type: ignore
+                continue
+
             midprice_open = curr.iloc[0]["mid_price"]  # type: ignore
             midprice_close = curr.iloc[-1]["mid_price"]  # type: ignore
             midprice_low = curr["mid_price"].min()
