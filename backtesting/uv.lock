@@ -315,7 +315,7 @@ wheels = [
 
 [[package]]
 name = "prosperity4btest"
-version = "0.4.2"
+version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipython", version = "9.10.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -325,14 +325,14 @@ dependencies = [
     { name = "tqdm" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/98/412cdaf46d73cff104514b94b25807027398b2f672ca37a448c5e43e60cc/prosperity4btest-0.4.2.tar.gz", hash = "sha256:67606f2d2388c4f2cb04f51fafaec11949898f721e658b8ff0e3d31907e09eb9", size = 328383, upload-time = "2026-03-26T16:16:29.246Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/88/6da588dc67655369a5cb5ebe1e6ffbc2d6fa162752a1ca7d3326888edc3e/prosperity4btest-1.0.1.tar.gz", hash = "sha256:289624ac5adb1ba762f1fb5e21dbe1e67389da6d6fbff3e737c3ba06370851a5", size = 990237, upload-time = "2026-04-14T11:16:52.174Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/15/fe6099d4b964bd7396b2de9eb7d0e14b67b5f8ff491071b95bf27b443ebf/prosperity4btest-0.4.2-py3-none-any.whl", hash = "sha256:c5d014edf2a159166eda06decc01021a9ce1e7afc9f7f380c9555b30a439a6b8", size = 372881, upload-time = "2026-03-26T16:16:27.857Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/4a/f89bdb9e04fe1fc9ac7e8b31719ff3bc9175e1c26dee9ae263747c3995b1/prosperity4btest-1.0.1-py3-none-any.whl", hash = "sha256:2c7817061816f39e75175c3272e1777e6a5cc56d526bae1dbb951bff1771cf25", size = 1080266, upload-time = "2026-04-14T11:16:50.342Z" },
 ]
 
 [[package]]
 name = "prosperity4btx"
-version = "0.0.2"
+version = "2.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipython", version = "9.10.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -342,9 +342,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/db/d1/6ec3e17b1c04a04e45e9007fde3176de7f8d4f0180893a39446c8b02862b/prosperity4btx-0.0.2.tar.gz", hash = "sha256:7687df07a7fec0a2a0ca45ad2bff65f79e38cb14bd7ca45c8a5643d3f689d697", size = 325626, upload-time = "2026-03-17T07:09:26.728Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/7d/073aa802c94cbc70a0a1ab9a11927939ec15eba05e867b0648806b5e3628/prosperity4btx-2.1.3.tar.gz", hash = "sha256:9c84e52a1b1b6aee6dd53c8a711db742b684aa519e2b1a62baa075a957b11365", size = 3970443, upload-time = "2026-04-19T20:22:58.358Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/0f/cd65609476ab34445b9ed8fa9288678c1ab947fd13b412f195f3bf72894a/prosperity4btx-0.0.2-py3-none-any.whl", hash = "sha256:0061db74d97fb3acab8c010320ace9c1b51c9f155a6b4e85d0a11a8615f4b159", size = 369857, upload-time = "2026-03-17T07:09:23.958Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/fb/7d96e61f29bed5281d13b74c0d5edb01a6f627e879b60bdf5bceb84f4e44/prosperity4btx-2.1.3-py3-none-any.whl", hash = "sha256:1f22c112b21bf02ea6ce962779a8a56c456e07dbede4eafd8806fcda114be6a5", size = 4140343, upload-time = "2026-04-19T20:22:55.989Z" },
 ]
 
 [[package]]
@@ -376,15 +376,15 @@ wheels = [
 
 [[package]]
 name = "rich"
-version = "14.3.3"
+version = "15.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markdown-it-py" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b3/c6/f3b320c27991c46f43ee9d856302c70dc2d0fb2dba4842ff739d5f46b393/rich-14.3.3.tar.gz", hash = "sha256:b8daa0b9e4eef54dd8cf7c86c03713f53241884e814f4e2f5fb342fe520f639b", size = 230582, upload-time = "2026-02-19T17:23:12.474Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/25/b208c5683343959b670dc001595f2f3737e051da617f66c31f7c4fa93abc/rich-14.3.3-py3-none-any.whl", hash = "sha256:793431c1f8619afa7d3b52b2cdec859562b950ea0d4b6b505397612db8d5362d", size = 310458, upload-time = "2026-02-19T17:23:13.732Z" },
+    { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654, upload-time = "2026-04-12T08:24:02.83Z" },
 ]
 
 [[package]]
