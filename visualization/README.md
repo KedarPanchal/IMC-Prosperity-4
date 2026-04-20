@@ -122,7 +122,7 @@ uv run visualization.py analysis -f path/to/file.csv --strategy haar --passes 4
 
 #### Note on `dft` artifacts (edge tail dropoffs)
 
-`dft` can sometimes create **start/end “tail” dropoffs**, especially when the data is already fairly clean. If you see that, try fewer `--passes` or switch to `ema` or `haar`.
+`dft` can sometimes create **start/end “tail” dropoffs**, due to the data entries not exactly aligning with the "frequency" the algorithm assigns to it. If you see that, try fewer `--passes` or switch to `ema` or `haar`.
 
 ## Run: bot clustering (`classification`)
 
