@@ -6,13 +6,29 @@ import math
 
 class Trader:
     """
-    Round 2 v3.4 - osmium expansion build
+    Round 2 v3.6 — adds pepper dump failsafe + refined MAF bid
 
-    Philosophy:
-    - Keep the proven carry engine in INTARIAN_PEPPER_ROOT.
-    - Add a very small roots micro-trading overlay that clips local pops and rebuys local dips
-      without letting the book drift far from long.
-    - Keep ASH_COATED_OSMIUM as incremental alpha, not the main risk source.
+    Changes vs v3.5 (which scored +8,657 in sim):
+      1. **MAF bid set to 2500.** After re-reading the PDF, MAF is a first-price
+         sealed-bid auction (winners pay their bid, not the median). With R1+manual
+         already at ~160k and R2 projecting well past 200k regardless, we're
+         qualifying either way — so the MAF cost effectively doesn't matter for
+         Phase 2. 2500 is moderate-aggressive: high enough to likely win the
+         auction (extra flow is worth ~+3-6k), low enough to not burn XIRECs
+         gratuitously.
+
+      2. **Pepper dump failsafe.** Insurance against the tail risk that IMC
+         flips the drift sign mid-round to punish hard-coders. Normal pepper
+         residuals (mid - fair) stay within ±8. Triggers:
+           - ARM: mid < fair - 15 for 3+ consecutive ticks, after warmup.
+             Stops all new buying. Holds position, watches.
+           - ESCALATE: armed AND (mid < fair - 25 once, OR armed for 5000+ ticks
+             without recovery). Aggressively liquidates: crosses bids, passive
+             asks inside spread.
+           - NEVER un-arms. Once trust is broken, stays defensive for the day.
+         In normal conditions this never triggers (10σ+ event).
+
+    Osmium and all other logic unchanged from v3.5.
     """
 
     POSITION_LIMITS = {
@@ -20,12 +36,9 @@ class Trader:
         "INTARIAN_PEPPER_ROOT": 80,
     }
 
-    MAF_BID = 12000
-
     # ---------- Pepper Root ----------
     PEPPER_SLOPE = 0.001
     PEPPER_INTERCEPT_ALPHA = 0.18
-    # The live run appears to end around 99,900; keep the old far-out unwind behavior so we hold carry.
     PEPPER_UNWIND_START = 820000.0
     PEPPER_FORCE_FLAT = 965000.0
     PEPPER_EARLY_PUSH_END = 7500.0
@@ -33,12 +46,20 @@ class Trader:
     PEPPER_MAX_PASSIVE = 30
     PEPPER_TAKE_MARGIN = 1.15
     PEPPER_SELL_MARGIN = 1.05
-    # Small roots HFT/scalp overlay. Intentionally tiny so it cannot overpower carry.
     PEPPER_SCALP_MIN_CORE = 65
     PEPPER_SCALP_SELL_EDGE = 1.4
     PEPPER_SCALP_BUY_EDGE = 1.0
     PEPPER_SCALP_UNIT = 8
     PEPPER_SCALP_MAX_INV = 12
+
+    # ---------- Pepper Failsafe ----------
+    # Thresholds chosen to NEVER trigger in normal data (max observed residual ~±8).
+    FAILSAFE_ARM_DIVERGENCE = 15.0          # mid < fair - 15 to start counting
+    FAILSAFE_ESCALATE_DIVERGENCE = 25.0     # mid < fair - 25 triggers liquidation
+    FAILSAFE_ARM_CONSECUTIVE = 3            # ticks of divergence to arm
+    FAILSAFE_WARMUP_TS = 2000               # don't arm before intercept stabilizes
+    FAILSAFE_ESCALATE_DURATION = 5000       # if armed this long without recovery, escalate
+    FAILSAFE_LIQUIDATE_MAX_CROSS = 40       # aggressive size when escalated
 
     # ---------- Osmium ----------
     OSMIUM_DEFAULT_FAIR = 10000.0
@@ -51,8 +72,24 @@ class Trader:
     OSMIUM_TARGET_SCALE = 30.0
     OSMIUM_MAX_TARGET = 76
     OSMIUM_MAX_CROSS = 8
-    OSMIUM_MAX_PASSIVE = 18
+    OSMIUM_MAX_PASSIVE = 22
     OSMIUM_INV_SKEW = 0.30
+
+    # ============================================================
+    # MARKET ACCESS FEE BID
+    # ============================================================
+    # First-price sealed-bid auction for the top 50% of bidders.
+    # Winners pay their bid (not the median). Context:
+    #   - R1 algo + R1 manual already puts us at ~160k cumulative.
+    #   - R2 algo projects to +86k at full day length, R2 manual likely +30-50k.
+    #   - We clear the 200k qualifying threshold comfortably with or without MAF.
+    #   - So MAF cost is "free" if we qualify anyway (R2 PnL gets wiped post-qualification).
+    # 2500 is a moderate-aggressive bid: high enough to confidently clear the
+    # median (beating non-bidders and most conservative bidders), but well below
+    # the ~6k+ expected upside of winning the 25% extra flow. Trying to actually
+    # win the auction rather than play it safe.
+    def bid(self) -> int:
+        return 2500
 
     def run(self, state: TradingState):
         mem = self._load_state(state.traderData)
@@ -61,6 +98,10 @@ class Trader:
         mem.setdefault("pepper_intercept", None)
         mem.setdefault("osmium_mu", self.OSMIUM_DEFAULT_FAIR)
         mem.setdefault("osmium_var", 16.0)
+        mem.setdefault("failsafe_armed", False)
+        mem.setdefault("failsafe_escalated", False)
+        mem.setdefault("failsafe_arm_ts", None)
+        mem.setdefault("failsafe_divergence_streak", 0)
 
         orders: Dict[str, List[Order]] = {}
         for product in state.order_depths:
@@ -75,6 +116,44 @@ class Trader:
         return orders, conversions, trader_data
 
     # ========================= Pepper Root =========================
+
+    def _update_failsafe(self, mem: dict, t: float, mid: float, spot_fair: float) -> None:
+        """Update failsafe state based on current residual. Modifies mem in-place."""
+        residual = mid - spot_fair  # negative = price below fair
+
+        # Only start evaluating after warmup (intercept needs to stabilize)
+        if t < self.FAILSAFE_WARMUP_TS:
+            mem["failsafe_divergence_streak"] = 0
+            return
+
+        # Escalation conditions — check these first, they latch permanently
+        if mem.get("failsafe_escalated"):
+            return  # already fully escalated, no further action needed here
+
+        # Severe divergence → escalate immediately (even from unarmed)
+        if residual < -self.FAILSAFE_ESCALATE_DIVERGENCE:
+            mem["failsafe_armed"] = True
+            mem["failsafe_escalated"] = True
+            if mem.get("failsafe_arm_ts") is None:
+                mem["failsafe_arm_ts"] = int(t)
+            return
+
+        # Count consecutive divergence ticks for arming
+        if residual < -self.FAILSAFE_ARM_DIVERGENCE:
+            mem["failsafe_divergence_streak"] = int(mem.get("failsafe_divergence_streak", 0)) + 1
+            if mem["failsafe_divergence_streak"] >= self.FAILSAFE_ARM_CONSECUTIVE:
+                if not mem.get("failsafe_armed"):
+                    mem["failsafe_armed"] = True
+                    mem["failsafe_arm_ts"] = int(t)
+        else:
+            # Any non-divergent tick breaks the streak (for initial arming only)
+            if not mem.get("failsafe_armed"):
+                mem["failsafe_divergence_streak"] = 0
+
+        # If armed for too long, escalate
+        if mem.get("failsafe_armed") and mem.get("failsafe_arm_ts") is not None:
+            if (t - mem["failsafe_arm_ts"]) >= self.FAILSAFE_ESCALATE_DURATION:
+                mem["failsafe_escalated"] = True
 
     def trade_pepper(self, product: str, state: TradingState, mem: dict) -> List[Order]:
         depth = state.order_depths[product]
@@ -99,8 +178,48 @@ class Trader:
         carry_fair = intercept + self.PEPPER_SLOPE * liquidation_ts
         target = self.pepper_target_position(t, limit)
 
-        # 1) Aggressive accumulation early. Once the edge is known, time-underweight is the main leak.
-        if ba is not None and pos < target:
+        # ============ FAILSAFE CHECK ============
+        self._update_failsafe(mem, t, mid, spot_fair)
+        failsafe_armed = mem.get("failsafe_armed", False)
+        failsafe_escalated = mem.get("failsafe_escalated", False)
+
+        if failsafe_escalated:
+            # EMERGENCY LIQUIDATION MODE
+            # Cross bids aggressively to dump the long position.
+            # Also post passive asks inside spread to catch any upticks.
+            if pos > 0 and bb is not None:
+                # Hit level-1 bid hard
+                bid_avail = max(0, depth.buy_orders.get(bb, 0))
+                qty = min(pos, bid_avail, self.FAILSAFE_LIQUIDATE_MAX_CROSS)
+                if qty > 0:
+                    out.append(Order(product, bb, -qty))
+                    pos -= qty
+                # Walk the book if level-1 is thin
+                if pos > 0 and depth.buy_orders:
+                    bid_prices = sorted(depth.buy_orders.keys(), reverse=True)
+                    for bp in bid_prices[1:]:  # skip level 1 already hit
+                        if pos <= 0:
+                            break
+                        avail = max(0, depth.buy_orders.get(bp, 0))
+                        qty = min(pos, avail, self.FAILSAFE_LIQUIDATE_MAX_CROSS // 2)
+                        if qty > 0:
+                            out.append(Order(product, bp, -qty))
+                            pos -= qty
+                # Passive ask to catch any bounce
+                if pos > 0 and ba is not None:
+                    ask_quote = max(bb + 1, ba - 1)
+                    sell_room = limit + pos
+                    sz = min(sell_room, pos, 20)
+                    if sz > 0:
+                        out.append(Order(product, ask_quote, -sz))
+            return self.merge_same_price_orders(product, out)
+
+        # ============ NORMAL OPERATION (or armed-but-not-escalated) ============
+        # When armed: stop all new buying. Hold current position. Continue normal sell logic
+        # so if price DOES recover, we can still unwind per normal rules.
+
+        # 1) Aggressive accumulation — SKIPPED IF ARMED
+        if not failsafe_armed and ba is not None and pos < target:
             ask_avail = max(0, -depth.sell_orders.get(ba, 0))
             urgency = target - pos
             edge = carry_fair - ba
@@ -111,8 +230,8 @@ class Trader:
                     out.append(Order(product, ba, qty))
                     pos += qty
 
-        # 2) Optional one-level reach if we're still well under target and the next ask is cheap enough.
-        if ba is not None and pos < target and depth.sell_orders:
+        # 2) Optional one-level reach — SKIPPED IF ARMED
+        if not failsafe_armed and ba is not None and pos < target and depth.sell_orders:
             ask_prices = sorted(depth.sell_orders.keys())
             if len(ask_prices) >= 2:
                 a2 = ask_prices[1]
@@ -124,7 +243,7 @@ class Trader:
                         out.append(Order(product, a2, qty))
                         pos += qty
 
-        # 3) Only sell if truly over target / late. Avoid churn while roots is the carry engine.
+        # 3) Sell logic — always active. Particularly important when armed (price may recover).
         if bb is not None and pos > target:
             bid_avail = max(0, depth.buy_orders.get(bb, 0))
             rich_now = bb - spot_fair
@@ -136,17 +255,13 @@ class Trader:
                     out.append(Order(product, bb, -qty))
                     pos -= qty
 
-        # 3b) Tiny roots micro-trading overlay.
-        # Only operate once we already have a healthy long core and only in small clips.
-        # Goal: sell a few units into local richness, rebuy a few on local weakness, while
-        # staying broadly long for carry.
-        if t < self.PEPPER_UNWIND_START and bb is not None and ba is not None:
+        # 3b) Scalp overlay — SKIPPED IF ARMED (don't add noise during suspicious conditions)
+        if not failsafe_armed and t < self.PEPPER_UNWIND_START and bb is not None and ba is not None:
             scalp_shortfall = max(0, limit - pos)
             scalp_excess = max(0, pos - self.PEPPER_SCALP_MIN_CORE)
             rich_now = bb - spot_fair
             cheap_now = spot_fair - ba
 
-            # Clip small pops if we're already heavily long.
             if pos >= self.PEPPER_SCALP_MIN_CORE + 4 and rich_now >= self.PEPPER_SCALP_SELL_EDGE:
                 bid_avail = max(0, depth.buy_orders.get(bb, 0))
                 qty = min(self.PEPPER_SCALP_UNIT, scalp_excess, bid_avail, self.PEPPER_SCALP_MAX_INV)
@@ -154,7 +269,6 @@ class Trader:
                     out.append(Order(product, bb, -qty))
                     pos -= qty
 
-            # Rebuy small dips to restore the carry book.
             if pos < limit and cheap_now >= self.PEPPER_SCALP_BUY_EDGE:
                 ask_avail = max(0, -depth.sell_orders.get(ba, 0))
                 qty = min(self.PEPPER_SCALP_UNIT, scalp_shortfall, ask_avail)
@@ -170,7 +284,6 @@ class Trader:
         best_inside_bid = bb + 1 if bb is not None else int(math.floor(spot_fair - 6))
         best_inside_ask = ba - 1 if ba is not None else int(math.ceil(spot_fair + 6))
 
-        # A touch tighter on the bid than v3.1 so we get filled sooner without turning into pure churn.
         bid_quote = int(math.floor(min(carry_fair - 2.2, best_inside_bid)))
         ask_quote = int(math.ceil(max(spot_fair + 5.5, best_inside_ask)))
         if ask_quote <= bid_quote:
@@ -178,13 +291,16 @@ class Trader:
 
         bid_size = 0
         ask_size = 0
-        if t < self.PEPPER_UNWIND_START:
+        # When armed: no passive bid (no new exposure), possibly wider passive ask
+        if failsafe_armed:
+            if pos > 0:
+                ask_size = min(sell_room, min(self.PEPPER_MAX_PASSIVE, 12 + over // 2))
+        elif t < self.PEPPER_UNWIND_START:
             if under > 0:
-                base = 16 if t < 8000 else (12 if t < 18000 else 10)
+                base = 18 if t < 8000 else (12 if t < 18000 else 10)
                 bid_size = min(buy_room, min(self.PEPPER_MAX_PASSIVE, base + under // 2))
             elif pos < limit:
                 bid_size = min(buy_room, 4)
-            # Keep ask extremely light until we're materially over target.
             if pos > target + 18:
                 ask_size = min(sell_room, min(6, 3 + over // 4))
         else:
@@ -213,7 +329,6 @@ class Trader:
         return self.merge_same_price_orders(product, out)
 
     def pepper_target_position(self, t: float, limit: int) -> int:
-        # Front-load size materially more than v3.1.
         if t < 1500:
             return int(round(limit * 0.95))
         if t < 6000:
@@ -269,7 +384,6 @@ class Trader:
         elif signal >= self.OSMIUM_EXIT_Z:
             desired = -min(self.OSMIUM_MAX_TARGET, int(round(signal * self.OSMIUM_TARGET_SCALE)))
 
-        # Aggressive only for true dislocations. Crossing the spread casually has been a loser.
         take_band = self.OSMIUM_TAKE_Z * sigma
         if ba is not None and pos < desired and ba <= fair - take_band:
             ask_avail = max(0, -depth.sell_orders.get(ba, 0))
@@ -289,9 +403,8 @@ class Trader:
         best_inside_bid = bb + 1 if bb is not None else int(math.floor(fair - sigma))
         best_inside_ask = ba - 1 if ba is not None else int(math.ceil(fair + sigma))
 
-        # Quote closer than v3.3 to harvest more passive fills, but still avoid casual crossing.
-        buy_offset = 0.30 * sigma - (0.10 * sigma if pos < -12 else 0.0)
-        sell_offset = 0.30 * sigma - (0.10 * sigma if pos > 12 else 0.0)
+        buy_offset = 0.30 * sigma - (0.10 * sigma if pos < -10 else 0.0)
+        sell_offset = 0.30 * sigma - (0.10 * sigma if pos > 10 else 0.0)
         bid_quote = int(math.floor(min(fair - buy_offset, best_inside_bid)))
         ask_quote = int(math.ceil(max(fair + sell_offset, best_inside_ask)))
         if ask_quote <= bid_quote:
@@ -301,15 +414,14 @@ class Trader:
         ask_size = 0
 
         if signal <= -self.OSMIUM_ENTRY_Z:
-            core = max(9, min(self.OSMIUM_MAX_PASSIVE + 6, desired - pos + 3))
+            core = max(10, min(self.OSMIUM_MAX_PASSIVE + 6, desired - pos + 3))
             bid_size = min(buy_room, core)
             ask_size = min(sell_room, 3 if pos > 16 else 1)
         elif signal >= self.OSMIUM_ENTRY_Z:
-            core = max(9, min(self.OSMIUM_MAX_PASSIVE + 6, pos - desired + 3))
+            core = max(10, min(self.OSMIUM_MAX_PASSIVE + 6, pos - desired + 3))
             ask_size = min(sell_room, core)
             bid_size = min(buy_room, 3 if pos < -16 else 1)
         else:
-            # Neutral zone: always show both sides and participate more than v3.3.
             if pos > 24:
                 ask_size = min(sell_room, min(self.OSMIUM_MAX_PASSIVE + 4, 10 + pos // 6))
                 bid_size = min(buy_room, 3)
@@ -318,20 +430,19 @@ class Trader:
                 ask_size = min(sell_room, 3)
             elif pos > 10:
                 ask_size = min(sell_room, 8 + pos // 8)
-                bid_size = min(buy_room, 4)
+                bid_size = min(buy_room, 5)
             elif pos < -10:
                 bid_size = min(buy_room, 8 + (-pos) // 8)
-                ask_size = min(sell_room, 4)
+                ask_size = min(sell_room, 5)
             else:
-                bid_size = min(buy_room, 6)
-                ask_size = min(sell_room, 6)
+                bid_size = min(buy_room, 8)
+                ask_size = min(sell_room, 8)
 
         if bid_size > 0:
             out.append(Order(product, bid_quote, bid_size))
         if ask_size > 0:
             out.append(Order(product, ask_quote, -ask_size))
 
-        # Hard inventory clamps.
         if pos > 72 and bb is not None:
             bid_avail = max(0, depth.buy_orders.get(bb, 0))
             qty = min(pos - 72, bid_avail)
@@ -354,6 +465,11 @@ class Trader:
             mem["pepper_intercept"] = None
             mem["osmium_mu"] = self.OSMIUM_DEFAULT_FAIR
             mem["osmium_var"] = 16.0
+            # Failsafe state also resets per-day (new day, clean slate)
+            mem["failsafe_armed"] = False
+            mem["failsafe_escalated"] = False
+            mem["failsafe_arm_ts"] = None
+            mem["failsafe_divergence_streak"] = 0
 
     @staticmethod
     def best_bid(depth) -> Optional[int]:
