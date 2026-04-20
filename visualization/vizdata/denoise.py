@@ -9,6 +9,7 @@ strength of the denoising, with more passes resulting in stronger smoothing.
 
 import math
 import statistics
+import numpy as np
 from typing import Callable
 
 
@@ -199,13 +200,56 @@ def exponential_moving_average_denoise(passes: int = 1, *args):
 
 # -- FOURIER DENOISING STRATEGIES ---------------------------------------------
 
+def discrete_fourier_transform_denoise(passes: int = 1, *args):
+    """Return a function that applies a discrete Fourier transform to denoise a
+    numeric series.
+
+    Args:
+        passes: The number of times to apply the Fourier transform; more passes
+        result in stronger denoising.
+        args: Ignored; included for interface consistency with other denoising
+        functions.
+
+    Returns:
+        A function that takes a list of numeric values and returns a denoised
+        list of the same length.
+    """
+    def dft(data: list[int | float]):
+        """Apply a discrete Fourier transform to denoise a numeric series.
+        Utilizes a Hanning window as a low-pass filter to reduce high-frequency
+        noise.
+
+        Args:
+            data: Sequence of numeric values.
+
+        Returns:
+            List of denoised values.
+        """
+        npdata = np.array(data)
+        for _ in range(passes):
+            # Compute the Fourier transform of the data
+            ffts = np.fft.fft(npdata)
+            # Apply a cosine low-pass filter to the Fourier coefficients
+            # The cosine function has cycle length equal to the data length
+            # This puts the -1 point of the filter at the Nyquist frequency
+            # This is a Hanning window with endpoints at 1 instead of 0
+            window = 0.5 * np.cos(2 * np.pi / len(npdata) * np.arange(len(npdata))) + 0.5
+            ffts *= window
+            # Invert the Fourier transform to get the denoised signal
+            npdata = np.fft.ifft(ffts).real
+
+        return npdata.tolist()
+
+    return dft
+
 
 # -- CONSTANTS ----------------------------------------------------------------
 
 DENOISING_STRATEGIES = {
     "identity": identity_denoise,
     "haar": haar_denoise,
-    "ema": exponential_moving_average_denoise
+    "ema": exponential_moving_average_denoise,
+    "dft": discrete_fourier_transform_denoise,
 }
 
 
