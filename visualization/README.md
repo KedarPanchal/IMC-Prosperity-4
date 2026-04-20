@@ -92,6 +92,8 @@ uv run visualization.py analysis -f path/to/file.csv --strategy haar
 Supported strategies:
 
 - `haar`: Haar wavelet denoising
+- `dft`: discrete Fourier transform denoising (cosine/Hanning-window low-pass filtering in the frequency domain)
+- `ema`: exponential moving average denoising
 - `identity`: no denoising (default)
 
 ### Control denoising strength with `--passes`
@@ -107,6 +109,10 @@ Impact of changing `--passes`:
 - **Lower passes (e.g. 1–2)**: keeps more detail; small wiggles and short-lived moves remain visible.
 - **Higher passes (e.g. 3–6)**: smoother curves; short spikes get reduced or removed.
 - **Too high**: the chart can become “over-smoothed”, where real turning points are flattened and fast moves look delayed or muted.
+
+#### Note on `dft` artifacts (edge tail dropoffs)
+
+The `dft` strategy can **disproportionately scale noisier frequencies**, which may introduce **tail dropoffs near the beginning and end of the series**—most noticeably when the underlying data is already relatively clean (less noisy). If you see this, try fewer `--passes`, switch strategies, or avoid using `dft` for boundary-sensitive analysis.
 
 ## Run: bot clustering (`classification`)
 
