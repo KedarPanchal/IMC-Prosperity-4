@@ -1,6 +1,6 @@
 # IMC Prosperity 4 Visualizer
 
-This tool opens interactive matplotlib windows to explore IMC Prosperity 4 CSV data (trade logs or price/orderbook logs). You can zoom/pan like a normal chart, and you can hover points to see the exact timestamp/value.
+This tool opens interactive charts to explore IMC Prosperity 4 CSV data (trades and/or prices). You can zoom and pan like a normal chart, and you can hover points to see the exact timestamp/value.
 
 ## What you need first
 
@@ -63,25 +63,23 @@ uv run visualization.py analysis -f path/to/file1.csv path/to/file2.csv
 
 Notes:
 
-- The CSVs are expected to be **semicolon-separated** (`;`) (this is how IMC Prosperity exports are typically formatted).
-- The tool **collates the files you pass into a single visualization per data type**:
-  - All trade-style CSVs you provide are combined into one trade figure.
-  - All price/orderbook-style CSVs you provide are combined into one price figure.
-  - If you pass a mix of both types, you’ll typically see **two windows total** (one trade, one price).
-- Files must be passed via `--files` / `-f` (positional file arguments are not supported).
+- These CSVs are usually **semicolon-separated** (`;`) (that’s the standard IMC export format).
+- If you pass multiple files, the tool will group them into sensible charts:
+  - Trade files show trade prices/quantities by product, plus an overall “master” price view.
+  - Price/orderbook files show bid/ask/fair value and volumes, plus an overall “master” view.
+  - If you pass both types, you’ll typically get **two windows** (one for trades, one for prices).
+- Files must be passed via `--files` / `-f` (positional arguments aren’t supported).
 
 ```bash
 uv run visualization.py analysis --files path/to/file1.csv path/to/file2.csv
 ```
 
-- If a file looks “wrong”, it may be the other dataset type. The program decides which view to show based on the columns it finds:
-  - Trade-style CSVs (it detects a `buyer` column) show price + quantity per symbol, plus a combined “master” price plot.
-  - Price/orderbook-style CSVs (it detects a `profit_and_loss` column) show bid/ask/fair value and volumes, plus a combined “master” plot.
-- If you pass multiple days of data, the tool expects filenames to include a day marker like `day_0`, `day_1`, etc. It uses that to offset timestamps so days plot in chronological order.
+- If a chart looks “wrong”, you may have passed the other dataset type. The tool auto-detects the file type from its columns.
+- If you pass multiple days of data, filenames should include a day marker like `day_0`, `day_1`, etc., so the tool can plot days in the right order.
 
 ## Optional: denoise for feature extraction and trend analysis
 
-Financial data often contains short-lived “noise” (tiny fluctuations, microstructure effects, random jumps) that can hide the bigger picture. Denoising is a way to **extract higher-level features**—like broader trends, regime changes, and persistent moves—by reducing that short-term noise before plotting.
+Market data is often “wiggly” at short time scales. Denoising helps you see the **bigger picture** (trend, broad moves, and turning points) by smoothing out small, fast fluctuations before plotting.
 
 ### Choose a denoising strategy
 
@@ -89,69 +87,61 @@ Financial data often contains short-lived “noise” (tiny fluctuations, micros
 uv run visualization.py analysis -f path/to/file.csv --strategy haar
 ```
 
-You can also specify the thresholding filter applied during denoising:
+Supported strategies (high-level):
+
+- `identity` (default): no smoothing, raw data
+- `ema`: a simple smoothing option that reacts gradually to changes
+- `haar`: a stronger “de-noise the bumps” option that can make the line cleaner
+- `dft`: frequency-based smoothing (often good for removing rapid oscillations, but see the note below)
+
+### Thresholding (optional): a filter applied after every pass
+
+Thresholding is an **extra filter applied after every smoothing pass**. In plain terms: it helps reduce the small “leftover” noise after each pass.
+
+Choose a thresholding style with `--thresholding` / `-t`:
+
+- `soft` (default): gently tapers values down in a **non-aggressive** way (a good general-purpose choice)
+- `hanning`: applies a smooth Hanning-style window across the **whole series** (useful when you want a consistent “global” smoothing effect)
+
+Example:
 
 ```bash
 uv run visualization.py analysis -f path/to/file.csv --strategy dft --passes 3 --thresholding hanning
 ```
 
-Supported strategies:
-
-- `haar`: Haar wavelet denoising
-- `dft`: discrete Fourier transform denoising (cosine/Hanning-window low-pass filtering in the frequency domain)
-- `ema`: exponential moving average denoising
-- `identity`: no denoising (default)
-
-### Thresholding: the filter applied after every denoising pass
-
-Thresholding is the **filter applied after every pass** of the denoising process to suppress noise:
-
-- In `haar`, thresholding is applied to the **detail coefficients** each pass (reducing spiky, high-frequency detail before reconstruction).
-- In `dft`, thresholding is applied to the **Fourier coefficients** each pass (shaping which frequencies are retained).
-
-Choose a thresholding strategy with `--thresholding` / `-t`:
-
-- `soft` (default): **soft thresholding** gently tapers values down (shrinks magnitudes toward 0) in a **non-aggressive** way.
-- `hanning`: **Hanning thresholding** applies a Hanning/cosine window across the **entire data** (useful when you want smooth global attenuation rather than coefficient-by-coefficient shrinkage).
-
 ### Control denoising strength with `--passes`
 
-`--passes` controls how strong the smoothing is (default is `2`).
+`--passes` controls how strong the smoothing is (default is `2`). More passes usually means a smoother line, with diminishing returns.
 
 ```bash
 uv run visualization.py analysis -f path/to/file.csv --strategy haar --passes 4
 ```
 
-Impact of changing `--passes`:
-
-- **Lower passes (e.g. 1–2)**: keeps more detail; small wiggles and short-lived moves remain visible.
-- **Higher passes (e.g. 3–6)**: smoother curves; short spikes get reduced or removed.
-- **Too high**: the chart can become “over-smoothed”, where real turning points are flattened and fast moves look delayed or muted.
+- If the chart still looks noisy, increase `--passes`.
+- If the chart feels “laggy” or misses sharp moves/turns, reduce `--passes`.
 
 #### Note on `dft` artifacts (edge tail dropoffs)
 
-The `dft` strategy can **disproportionately scale noisier frequencies**, which may introduce **tail dropoffs near the beginning and end of the series**—most noticeably when the underlying data is already relatively clean (less noisy). If you see this, try fewer `--passes`, switch strategies, or avoid using `dft` for boundary-sensitive analysis.
+`dft` can sometimes create **start/end “tail” dropoffs**, especially when the data is already fairly clean. If you see that, try fewer `--passes` or switch to `ema` or `haar`.
 
 ## Run: bot clustering (`classification`)
 
-There is also a clustering-based helper to group “bots” based on trading behavior using k-means clustering.
+There is also a helper that groups “bots” by similar trading behavior (a quick way to spot who trades similarly).
 
 It expects **matching trade + price CSVs** for the same day(s):
 
 - Trade logs (filenames typically contain `trades`) provide executed trades (e.g., `buyer`, `seller`, `price`, `quantity`).
 - Price/orderbook logs (filenames typically contain `prices`) provide the market state (including `mid_price`).
 
-The classifier also expects the filenames to include a day marker like `day_0`, `day_1`, etc., so it can line up days correctly.
+The classifier expects filenames to include a day marker like `day_0`, `day_1`, etc., so it can line up days correctly.
 
-### What the clustering “looks at”
+### What clustering uses (high-level)
 
-The clustering is based on simple behavior features computed per symbol over short time buckets, including:
+It summarizes each trader’s behavior (per product and over time) using simple signals like:
 
-- **Price shape**: open/close, high/low, return, and range (from `mid_price`)
-- **Activity**: total traded volume, number of trades, and average trade size
-- **Symbol exposure**: which products were being traded (one-hot encoded)
-
-Before clustering, the features are standardized (so different scales don’t dominate), reduced to 2D with PCA for visualization, and then grouped using k-means.
+- How active they are (how often / how much they trade)
+- Whether they tend to buy vs sell
+- How their trading lines up with price moves
 
 Run:
 
