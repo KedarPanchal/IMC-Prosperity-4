@@ -57,14 +57,74 @@ def _sign(x: int | float):
 _SQRT2 = math.sqrt(2)
 
 
+# -- THRESHOLDING STRATEGIES --------------------------------------------------
+
+def soft_thresholding(
+        data: list[int | float] | np.ndarray,
+        preserve_type: bool = True
+        ):
+    """Apply soft thresholding to a list of numeric values to reduce noise.
+
+    Args:
+        data: Sequence of numeric values to threshold.
+        preserve_type: Whether to return the result as the same type as the
+        input data
+    Returns:
+        A list of the same length as the input, where each value has been
+        reduced by the computed threshold if it exceeds the threshold,
+        or set to zero if it does not.
+    """
+    abs_median = statistics.median(map(abs, data))
+    sigma = abs_median / 0.67448975
+    threshold = sigma * math.sqrt(2 * math.log(len(data)))
+    result = [_sign(x) * max(abs(x) - threshold, 0) for x in data]
+
+    if preserve_type and type(data) is np.ndarray:
+        return np.array(result, dtype=data.dtype)
+    return result
+
+
+def hanning_thresholding(
+        data: list[int | float] | np.ndarray,
+        preserve_type: bool = True
+        ):
+    """Apply a Hanning window thresholding to a list of numeric values to reduce
+    noise.
+
+    Args:
+        data: Sequence of numeric values to threshold.
+
+    Returns:
+        A list of the same length as the input, where each value has been
+        multiplied by a Hanning window function that reduces the influence of
+        values near the edges of the list, which are more likely to contain
+        noise.
+    """
+    if type(data) is not np.ndarray:
+        data = np.array(data)
+
+    window = 0.5 * np.cos(2 * np.pi / len(data) * np.arange(len(data))) + 0.5
+    result = data * window
+
+    if preserve_type and type(data) is np.ndarray:
+        return result.astype(data.dtype)
+    return result.tolist()
+
+
 # -- NON-FOURIER DENOISING STRATEGIES -----------------------------------------
 
-def identity_denoise(passes: int = 1, *args):
+def identity_denoise(
+        passes: int = 1,
+        threshold: Callable = soft_thresholding,
+        *args
+        ):
     """Return a function that performs no denoising and returns the input data
     as-is.
 
     Args:
         passes: Ignored; included for interface consistency with other
+        denoising functions.
+        threshold: Ignored; included for interface consistency with other
         denoising functions.
         args: Ignored; included for interface consistency with other denoising
         functions.
@@ -87,13 +147,20 @@ def identity_denoise(passes: int = 1, *args):
     return identity
 
 
-def haar_denoise(passes: int = 1, *args):
+def haar_denoise(
+        passes: int = 1,
+        threshold: Callable = soft_thresholding,
+        *args
+        ):
     """Return a function that applies a simple Haar wavelet transform to
     denoise a numeric series.
 
     Args:
         passes: The number of times to apply the Haar transform; more passes
         result in stronger denoising.
+        threshold: A function that takes a list of numeric values and applies a
+        thresholding strategy to reduce noise in the detail coefficients of the
+        Haar transform; the default is soft thresholding.
         args: Ignored; included for interface consistency with other denoising
         functions.
 
@@ -133,11 +200,7 @@ def haar_denoise(passes: int = 1, *args):
             cDs = [(x - y) / _SQRT2 for x, y in cA_pairs]
 
             # Apply a threshold to transform the detail coefficients
-            abs_median = statistics.median(map(abs, cDs))
-            sigma = abs_median / 0.67448975
-            threshold = sigma * math.sqrt(2 * math.log(len(cDs)))
-            cDs = [_sign(cD) * max(abs(cD) - threshold, 0) for cD in cDs]
-
+            cDs = threshold(cDs)
             # Store the coefficients for reconstruction
             cD_list.append(cDs)
             # Compute the next approximation coefficients
@@ -157,13 +220,19 @@ def haar_denoise(passes: int = 1, *args):
     return haar
 
 
-def exponential_moving_average_denoise(passes: int = 1, *args):
+def exponential_moving_average_denoise(
+        passes: int = 1,
+        threshold: Callable = soft_thresholding,
+        *args
+        ):
     """Return a function that applies an exponential moving average to denoise
     a numeric series.
 
     Args:
         passes: The number of times to apply the exponential moving average;
         more passes result in stronger denoising.
+        threshold: Ignored; included for interface consistency with other
+        denoising functions.
         args: Additional arguments for the exponential moving average function;
         the first argument is expected to be the alpha value (smoothing factor)
         to use for the moving average, with a default of 0.5 if not provided.
@@ -200,13 +269,20 @@ def exponential_moving_average_denoise(passes: int = 1, *args):
 
 # -- FOURIER DENOISING STRATEGIES ---------------------------------------------
 
-def discrete_fourier_transform_denoise(passes: int = 1, *args):
+def discrete_fourier_transform_denoise(
+        passes: int = 1,
+        threshold: Callable = hanning_thresholding,
+        *args
+        ):
     """Return a function that applies a discrete Fourier transform to denoise a
     numeric series.
 
     Args:
         passes: The number of times to apply the Fourier transform; more passes
         result in stronger denoising.
+        threshold: A function that takes a list of numeric values and applies a
+        thresholding strategy to reduce noise in the Fourier coefficients; the
+        default is a Hanning window thresholding.
         args: Ignored; included for interface consistency with other denoising
         functions.
 
@@ -229,12 +305,8 @@ def discrete_fourier_transform_denoise(passes: int = 1, *args):
         for _ in range(passes):
             # Compute the Fourier transform of the data
             ffts = np.fft.fft(npdata)
-            # Apply a cosine low-pass filter to the Fourier coefficients
-            # The cosine function has cycle length equal to the data length
-            # This puts the -1 point of the filter at the Nyquist frequency
-            # This is a Hanning window with endpoints at 1 instead of 0
-            window = 0.5 * np.cos(2 * np.pi / len(npdata) * np.arange(len(npdata))) + 0.5
-            ffts *= window
+            # Apply a Hanning window as a low-pass filter
+            ffts = threshold(ffts)
             # Invert the Fourier transform to get the denoised signal
             npdata = np.fft.ifft(ffts).real
 
@@ -250,6 +322,11 @@ DENOISING_STRATEGIES = {
     "haar": haar_denoise,
     "ema": exponential_moving_average_denoise,
     "dft": discrete_fourier_transform_denoise,
+}
+
+THRESHOLDING_STRATEGIES = {
+    "soft": soft_thresholding,
+    "hanning": hanning_thresholding,
 }
 
 

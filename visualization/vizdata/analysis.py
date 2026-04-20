@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import mplcursors
 
-from vizdata.denoise import DENOISING_STRATEGIES, not_identity
+from vizdata.denoise import DENOISING_STRATEGIES, THRESHOLDING_STRATEGIES, not_identity
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
@@ -514,6 +514,7 @@ def analyze_data(
         file_paths: list[str],
         strategy: str,
         passes: int,
+        thresholding: str,
         alpha: float
         ):
     """Load a semicolon-separated CSV and dispatch to trade or price
@@ -553,10 +554,12 @@ def analyze_data(
 
     # Determine the appropriate denoising function based on the strategy
     try:
-        denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
+        thresh = THRESHOLDING_STRATEGIES[thresholding]
+        denoise = DENOISING_STRATEGIES[strategy](passes, thresh, alpha)
     except ValueError as e:
-        print(f"Error: {e}. Defaulting to no denoising.")
-        denoise = DENOISING_STRATEGIES["identity"](passes, alpha)
+        print(f"Error: {e}. Defaulting to no denoising and soft thresholding.")
+        thresh = THRESHOLDING_STRATEGIES["soft"]
+        denoise = DENOISING_STRATEGIES["identity"](passes, thresh, alpha)
 
     if len(trade_paths) > 0:
         # Offset timestamps by day to ensure they are plotted chronologically

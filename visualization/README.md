@@ -89,12 +89,30 @@ Financial data often contains short-lived “noise” (tiny fluctuations, micros
 uv run visualization.py analysis -f path/to/file.csv --strategy haar
 ```
 
+You can also specify the thresholding filter applied during denoising:
+
+```bash
+uv run visualization.py analysis -f path/to/file.csv --strategy dft --passes 3 --thresholding hanning
+```
+
 Supported strategies:
 
 - `haar`: Haar wavelet denoising
 - `dft`: discrete Fourier transform denoising (cosine/Hanning-window low-pass filtering in the frequency domain)
 - `ema`: exponential moving average denoising
 - `identity`: no denoising (default)
+
+### Thresholding: the filter applied after every denoising pass
+
+Thresholding is the **filter applied after every pass** of the denoising process to suppress noise:
+
+- In `haar`, thresholding is applied to the **detail coefficients** each pass (reducing spiky, high-frequency detail before reconstruction).
+- In `dft`, thresholding is applied to the **Fourier coefficients** each pass (shaping which frequencies are retained).
+
+Choose a thresholding strategy with `--thresholding` / `-t`:
+
+- `soft` (default): **soft thresholding** gently tapers values down (shrinks magnitudes toward 0) in a **non-aggressive** way.
+- `hanning`: **Hanning thresholding** applies a Hanning/cosine window across the **entire data** (useful when you want smooth global attenuation rather than coefficient-by-coefficient shrinkage).
 
 ### Control denoising strength with `--passes`
 

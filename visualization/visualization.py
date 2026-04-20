@@ -4,7 +4,7 @@ import argparse
 import os
 
 from vizdata.analysis import analyze_data
-from vizdata.denoise import DENOISING_STRATEGIES
+from vizdata.denoise import DENOISING_STRATEGIES, THRESHOLDING_STRATEGIES
 from vizdata.botclassifier import collate_data, classify_bots
 
 
@@ -51,6 +51,14 @@ def main():
             help="The number of denoising passes to perform"
             )
     analysis_parser.add_argument(
+        "--thresholding",
+        "-t",
+        dest="thresholding",
+        choices=list(THRESHOLDING_STRATEGIES.keys()),
+        default="soft",
+        help="Which thresholding algorithm to utilize when denoising the data"
+        )
+    analysis_parser.add_argument(
             "--alpha",
             "-a",
             dest="alpha",
@@ -91,6 +99,7 @@ def main():
             files,
             args.strategy,
             args.passes,
+            args.thresholding,
             args.alpha
             )
     elif args.command == "classification":
