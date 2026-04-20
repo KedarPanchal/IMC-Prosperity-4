@@ -55,7 +55,7 @@ def main():
         "-t",
         dest="thresholding",
         choices=list(THRESHOLDING_STRATEGIES.keys()),
-        default="soft",
+        default="hanning",
         help="Which thresholding algorithm to utilize when denoising the data"
         )
     analysis_parser.add_argument(

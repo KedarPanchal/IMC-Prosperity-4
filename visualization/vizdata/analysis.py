@@ -557,8 +557,8 @@ def analyze_data(
         thresh = THRESHOLDING_STRATEGIES[thresholding]
         denoise = DENOISING_STRATEGIES[strategy](passes, thresh, alpha)
     except ValueError as e:
-        print(f"Error: {e}. Defaulting to no denoising and soft thresholding.")
-        thresh = THRESHOLDING_STRATEGIES["soft"]
+        print(f"Error: {e}. Defaulting to no denoising and hanning thresholding.")
+        thresh = THRESHOLDING_STRATEGIES["hanning"]
         denoise = DENOISING_STRATEGIES["identity"](passes, thresh, alpha)
 
     if len(trade_paths) > 0:

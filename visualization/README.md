@@ -100,8 +100,8 @@ Thresholding is an **extra filter applied after every smoothing pass**. In plain
 
 Choose a thresholding style with `--thresholding` / `-t`:
 
-- `soft` (default): gently tapers values down in a **non-aggressive** way (a good general-purpose choice)
-- `hanning`: applies a smooth Hanning-style window across the **whole series** (useful when you want a consistent “global” smoothing effect)
+- `soft`: gently tapers values down in a **non-aggressive** way (a good general-purpose choice)
+- `hanning` (default): applies a smooth Hanning-style window across the **whole series** (useful when you want a consistent “global” smoothing effect)
 
 Example:
 
