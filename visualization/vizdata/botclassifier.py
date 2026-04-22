@@ -25,7 +25,6 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
 
     Args:
         files: List of file paths to collate data from.
-
     Returns:
         A single DataFrame containing the collated data from all valid files.
     """
