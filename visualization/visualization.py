@@ -4,7 +4,7 @@ import argparse
 import os
 
 from vizdata.analysis import analyze_data
-from vizdata.denoise import DENOISING_STRATEGIES, THRESHOLDING_STRATEGIES
+from vizdata.denoise import DENOISING_STRATEGIES
 from vizdata.botclassifier import collate_data, classify_bots
 
 
@@ -43,43 +43,35 @@ def main():
         help="Which denoising algorithm to utilize when denoising the data"
         )
     analysis_parser.add_argument(
-            "--passes",
-            "-p",
-            dest="passes",
-            type=int,
-            default=2,
-            help="The number of denoising passes to perform"
-            )
-    analysis_parser.add_argument(
-        "--thresholding",
-        "-t",
-        dest="thresholding",
-        choices=list(THRESHOLDING_STRATEGIES.keys()),
-        default="hanning",
-        help="Which thresholding algorithm to utilize when denoising the data"
+        "--passes",
+        "-p",
+        dest="passes",
+        type=int,
+        default=2,
+        help="The number of denoising passes to perform"
         )
     analysis_parser.add_argument(
-            "--alpha",
-            "-a",
-            dest="alpha",
-            type=float,
-            default=0.5,
-            help="The alpha value to compute the exponential moving average for the EMA denoising strategy"
-            )
+        "--alpha",
+        "-a",
+        dest="alpha",
+        type=float,
+        default=0.5,
+        help="The alpha value to compute the exponential moving average for the EMA denoising strategy"
+        )
 
     classification_parser = subparser.add_parser(
-            "classification",
-            parents=[base_parser],
-            help="Classify bots based on trading data"
-            )
+        "classification",
+        parents=[base_parser],
+        help="Classify bots based on trading data"
+        )
     classification_parser.add_argument(
-            "--clusters",
-            "-k",
-            dest="clusters",
-            type=int,
-            default=10,
-            help="The number of clusters to use for bot classification"
-            )
+        "--clusters",
+        "-k",
+        dest="clusters",
+        type=int,
+        default=10,
+        help="The number of clusters to use for bot classification"
+        )
 
     args = parser.parse_args()
 
@@ -99,7 +91,6 @@ def main():
             files,
             args.strategy,
             args.passes,
-            args.thresholding,
             args.alpha
             )
     elif args.command == "classification":

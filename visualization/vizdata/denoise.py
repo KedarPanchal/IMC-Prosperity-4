@@ -115,7 +115,6 @@ def hanning_thresholding(
 
 def identity_denoise(
         passes: int = 1,
-        threshold: Callable = soft_thresholding,
         *args
         ):
     """Return a function that performs no denoising and returns the input data
@@ -123,8 +122,6 @@ def identity_denoise(
 
     Args:
         passes: Ignored; included for interface consistency with other
-        denoising functions.
-        threshold: Ignored; included for interface consistency with other
         denoising functions.
         args: Ignored; included for interface consistency with other denoising
         functions.
@@ -149,7 +146,6 @@ def identity_denoise(
 
 def haar_denoise(
         passes: int = 1,
-        threshold: Callable = soft_thresholding,
         *args
         ):
     """Return a function that applies a simple Haar wavelet transform to
@@ -158,8 +154,6 @@ def haar_denoise(
     Args:
         passes: The number of times to apply the Haar transform; more passes
         result in stronger denoising.
-        threshold: A function that takes a list of numeric values and applies a
-        thresholding strategy to reduce noise in the detail coefficients of the
         Haar transform; the default is soft thresholding.
         args: Ignored; included for interface consistency with other denoising
         functions.
@@ -200,7 +194,7 @@ def haar_denoise(
             cDs = [(x - y) / _SQRT2 for x, y in cA_pairs]
 
             # Apply a threshold to transform the detail coefficients
-            cDs = threshold(cDs)
+            cDs = soft_thresholding(cDs)
             # Store the coefficients for reconstruction
             cD_list.append(cDs)
             # Compute the next approximation coefficients
@@ -222,7 +216,6 @@ def haar_denoise(
 
 def exponential_moving_average_denoise(
         passes: int = 1,
-        threshold: Callable = soft_thresholding,
         *args
         ):
     """Return a function that applies an exponential moving average to denoise
@@ -231,8 +224,6 @@ def exponential_moving_average_denoise(
     Args:
         passes: The number of times to apply the exponential moving average;
         more passes result in stronger denoising.
-        threshold: Ignored; included for interface consistency with other
-        denoising functions.
         args: Additional arguments for the exponential moving average function;
         the first argument is expected to be the alpha value (smoothing factor)
         to use for the moving average, with a default of 0.5 if not provided.
@@ -271,7 +262,6 @@ def exponential_moving_average_denoise(
 
 def discrete_fourier_transform_denoise(
         passes: int = 1,
-        threshold: Callable = hanning_thresholding,
         *args
         ):
     """Return a function that applies a discrete Fourier transform to denoise a
@@ -280,9 +270,6 @@ def discrete_fourier_transform_denoise(
     Args:
         passes: The number of times to apply the Fourier transform; more passes
         result in stronger denoising.
-        threshold: A function that takes a list of numeric values and applies a
-        thresholding strategy to reduce noise in the Fourier coefficients; the
-        default is a Hanning window thresholding.
         args: Ignored; included for interface consistency with other denoising
         functions.
 
@@ -306,7 +293,7 @@ def discrete_fourier_transform_denoise(
             # Compute the Fourier transform of the data
             ffts = np.fft.fft(npdata)
             # Apply a Hanning window as a low-pass filter
-            ffts = threshold(ffts)
+            ffts = hanning_thresholding(ffts)
             # Invert the Fourier transform to get the denoised signal
             npdata = np.fft.ifft(ffts).real
 
@@ -322,11 +309,6 @@ DENOISING_STRATEGIES = {
     "haar": haar_denoise,
     "ema": exponential_moving_average_denoise,
     "dft": discrete_fourier_transform_denoise,
-}
-
-THRESHOLDING_STRATEGIES = {
-    "soft": soft_thresholding,
-    "hanning": hanning_thresholding,
 }
 
 
