@@ -94,21 +94,6 @@ Supported strategies (high-level):
 - `haar`: a stronger “de-noise the bumps” option that can make the line cleaner
 - `dft`: frequency-based smoothing (often good for removing rapid oscillations, but see the note below)
 
-### Thresholding (optional): a filter applied after every pass
-
-Thresholding is an **extra filter applied after every smoothing pass**. In plain terms: it helps reduce the small “leftover” noise after each pass.
-
-Choose a thresholding style with `--thresholding` / `-t`:
-
-- `soft`: gently tapers values down in a **non-aggressive** way (a good general-purpose choice)
-- `hanning` (default): applies a smooth Hanning-style window across the **whole series** (useful when you want a consistent “global” smoothing effect)
-
-Example:
-
-```bash
-uv run visualization.py analysis -f path/to/file.csv --strategy dft --passes 3 --thresholding hanning
-```
-
 ### Control denoising strength with `--passes`
 
 `--passes` controls how strong the smoothing is (default is `2`). More passes usually means a smoother line, with diminishing returns.

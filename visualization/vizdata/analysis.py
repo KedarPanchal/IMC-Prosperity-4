@@ -11,11 +11,29 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 import mplcursors
+import PySimpleGUI as sg
 
 from vizdata.denoise import DENOISING_STRATEGIES, not_identity
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
+
+def _collate(data: dict[Any, pd.DataFrame]):
+    """Collate a dictionary of DataFrames into a single DataFrame sorted by
+    timestamp.
+
+    This function processes data across multiple days and alters timestamps
+    such that later days have higher timestamp values.
+    """
+    if len(data) == 0:
+        return pd.DataFrame()
+
+    # Each day has 1 million timestamps
+    for i, day in enumerate(sorted(set(data.keys()))):
+        data[day]["timestamp"] += i * 1_000_000
+
+    return pd.concat(data.values(), ignore_index=True).sort_values("timestamp")
+
 
 def _formatter(value: Any, discard: Any):
     """Format a numeric value as an integer string for axis ticks."""
@@ -510,6 +528,8 @@ def _analyze_price_data(
     plt.show()
 
 
+# -- MAIN ANALYSIS FUNCTION ---------------------------------------------------
+
 def analyze_data(
         file_paths: list[str],
         strategy: str,
@@ -532,7 +552,6 @@ def analyze_data(
     Returns:
         None.
     """
-
     trade_paths = defaultdict(pd.DataFrame)
     price_paths = defaultdict(pd.DataFrame)
     day_regex = re.compile(r"(?<=day_)-?\d+")
@@ -555,24 +574,15 @@ def analyze_data(
     try:
         denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
     except ValueError as e:
-        print(f"Error: {e}. Defaulting to no denoising and hanning thresholding.")
+        print(f"Error: {e}. Defaulting to no denoising.")
         denoise = DENOISING_STRATEGIES["identity"](passes, alpha)
 
     if len(trade_paths) > 0:
-        # Offset timestamps by day to ensure they are plotted chronologically
-        for i, day in enumerate(sorted(set(trade_paths.keys()))):
-            trade_paths[day]["timestamp"] += i * 1_000_000
-
-        trade_data = pd.concat(trade_paths.values(), ignore_index=True).sort_values("timestamp")
+        trade_data = _collate(trade_paths)
         _analyze_trade_data(trade_data, denoise)
 
     if len(price_paths) > 0:
-        # Offset timestamps by day to ensure they are plotted chronologically
-        for i, day in enumerate(sorted(set(price_paths.keys()))):
-            price_paths[day]["timestamp"] += i * 1_000_000
-
-        price_data = pd.concat(price_paths.values(), ignore_index=True).sort_values("timestamp")
-
+        price_data = _collate(price_paths)
         _analyze_price_data(price_data, alpha, denoise)
 
     if len(trade_paths) == 0 and len(price_paths) == 0:
