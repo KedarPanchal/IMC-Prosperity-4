@@ -110,6 +110,18 @@ uv run visualization.py -f path/to/prices_day_0.csv path/to/trades_day_0.csv
 
 Hovering over any line shows a tooltip with the exact timestamp and value.
 
+### Two products at a time
+
+Because there's only so much space on screen, each chart window shows **two products side by side** at once. On startup, the tool picks the first two products alphabetically.
+
+The left-side control panel has a list of checkboxes — one per product. Exactly two are checked at any moment. To swap one out:
+
+1. **Click the checkbox of a product you want to see.** The chart immediately replaces the *oldest* of the two currently displayed products with the one you just picked.
+2. The previously displayed product's checkbox turns off automatically — you don't need to uncheck it yourself.
+3. The bottom "All Items" strip only shows the two products that are currently selected.
+
+> **Tip:** You can't uncheck a product directly — just click a different one and the swap happens for you.
+
 ### Left-side control panel (analysis mode)
 
 Both windows have a control panel on the left side. It lets you smooth the data live without re-running the tool.
