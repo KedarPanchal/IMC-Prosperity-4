@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.axes import Axes
 
+from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
 
@@ -206,3 +207,27 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
 
     final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
     return final_dataframe.set_index("timestamp_start")
+
+
+def preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
+    """Preprocess the data for machine learning by performing feature
+    engineering and normalization.
+
+    Args:
+        data: DataFrame containing the raw trading data to preprocess.
+    Returns:
+        A tuple containing the following elements:
+        - A DataFrame with the original data (with timestamp columns dropped).
+        - A DataFrame with the engineered features (after 1-hot encoding).
+        - A NumPy array containing the normalized feature values.
+    """
+    # Drop columns for timesteps
+    dropped = data.drop(
+        columns=["timestamp_start", "timestamp_end"],
+        errors="ignore"
+        )
+    # Perform 1-hot encoding for purchased items
+    features = pd.get_dummies(dropped, columns=["symbol"], drop_first=True)
+    # Normalize the features
+    scaler = StandardScaler()
+    return dropped, features, scaler.fit_transform(features)

@@ -12,10 +12,9 @@ import mplcursors
 from scipy.spatial import Voronoi, voronoi_plot_2d
 
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
-from .mlutils import make_plot, pca_contributions
+from .mlutils import make_plot, pca_contributions, preprocess_data
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
@@ -63,7 +62,12 @@ def _plot_data(data_axes: Axes, data: np.ndarray, k: int, seed: int):
     return kmeans, scatter, colormap
 
 
-def _kmeans_gui(fig: Figure, data: np.ndarray, control_axes: Axes, data_axes: Axes):
+def _kmeans_gui(
+        fig: Figure,
+        data: np.ndarray,
+        control_axes: Axes,
+        data_axes: Axes
+        ):
     """Create a GUI for adjusting the number of clusters (k) and random seed
     for k-means clustering.
 
@@ -129,17 +133,10 @@ def classify_bots(data: pd.DataFrame) -> None:
     Returns:
         None.
     """
-    # Drop columns for timesteps
-    dropped = data.drop(
-            columns=["timestamp_start", "timestamp_end"],
-            errors="ignore"
-            )
-    # Perform 1-hot encoding for purchased items
-    features = pd.get_dummies(dropped, columns=["symbol"], drop_first=True)
-    # Normalize the features and perform PCA for dimensionality reduction
-    scaler = StandardScaler()
+    # Preprocess data and perform PCA
+    dropped, features, scaled = preprocess_data(data)
     pca = PCA(n_components=2, svd_solver="full")
-    pca_features = pca.fit_transform(scaler.fit_transform(features))
+    pca_features = pca.fit_transform(scaled)
 
     # Perform k means clustering and plot the results
     fig, axes, control_axes = make_plot("Trading Bot Classification")
