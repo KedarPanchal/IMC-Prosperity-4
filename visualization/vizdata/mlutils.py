@@ -5,9 +5,13 @@ from collections import defaultdict
 import re
 
 import pandas as pd
+import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.axes import Axes
+
+from sklearn.decomposition import PCA
 
 
 # -- PLOTTING -----------------------------------------------------------------
@@ -44,6 +48,36 @@ def make_plot(title: str):
     data_axes = fig.add_subplot(gs[0, 1])
 
     return fig, data_axes, control_axes
+
+
+def pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
+    contributions = np.square(pca.components_)
+    contributions = contributions / contributions.sum(axis=1, keepdims=True)
+    contributions_dataframe = pd.DataFrame(
+            contributions * 100,
+            columns=features.columns
+            )
+    pca1_text = control_axes.text(
+        0.05,
+        0.85,
+        "PCA Component 1 Composition:\n\n" +
+        '\n'.join(f"{col}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
+        transform=control_axes.transAxes,
+        verticalalignment='top',
+        size=8
+        )
+    pca2_text = control_axes.text(
+        0.05,
+        0.40,
+        "PCA Component 2 Composition:\n\n" +
+        '\n'.join(f"{col}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
+        transform=control_axes.transAxes,
+        verticalalignment='top',
+        size=8
+        )
+    return pca1_text, pca2_text
 
 
 # -- DATA PREPARATION --------------------------------------------------------
@@ -172,6 +206,3 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
 
     final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
     return final_dataframe.set_index("timestamp_start")
-
-
-
