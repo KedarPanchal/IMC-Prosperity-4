@@ -231,7 +231,8 @@ def _plot_selection_gui(
         ax_master: The master axis for plotting all items together.
         control_axes: The axis on which to place the GUI controls.
         data: The full trade data DataFrame, used to determine the unique trade
-        items and filter the data when updating the plots.
+        items and filter the data when updating the plots. Assumed to have 2+
+        products/symbols to enable toggling.
         kwargs: The line artists and raw data lists for the plot artists.
         This is what determines whether to plot trade data (price and quantity)
         or price data (bid/ask/fair price and volumes).
