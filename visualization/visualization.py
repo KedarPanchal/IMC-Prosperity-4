@@ -56,6 +56,8 @@ def main():
         if data is None:
             parser.error("No valid data for classification")
         classify_bots(data)
+    else:
+        parser.error(f"Unknown mode: {args.mode}")
 
 
 if __name__ == "__main__":
