@@ -171,19 +171,19 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
         The created GUI controls (buttons and text boxes) since matplotlib
         requires keeping references to them to prevent garbage collection.
     """
-    button_axes = axes.inset_axes((0.05, 0.4, 0.9, 0.15))
+    button_axes = axes.inset_axes((0.05, 0.55, 0.9, 0.15))
     button = widgets.RadioButtons(
             button_axes,
             labels=list(DENOISING_STRATEGIES.keys()),
             active=list(DENOISING_STRATEGIES.keys()).index("identity")
             )
-    passes_axes = axes.inset_axes((0.25, 0.35, 0.7, 0.04))
+    passes_axes = axes.inset_axes((0.25, 0.5, 0.7, 0.04))
     passes = widgets.TextBox(
             passes_axes,
             label="Passes: ",
             initial="6",
             )
-    alpha_axes = axes.inset_axes((0.52, 0.3, 0.43, 0.04))
+    alpha_axes = axes.inset_axes((0.52, 0.45, 0.43, 0.04))
     alpha = widgets.TextBox(
             alpha_axes,
             label="Alpha (EMA only): ",
@@ -214,7 +214,134 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
     return button, passes, alpha
 
 
+def _plot_selection_gui(
+        fig: Figure,
+        axes: np.ndarray,
+        ax_master: Axes,
+        control_axes: Axes,
+        data: pd.DataFrame,
+        **kwargs
+        ):
+    plot_selection_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.35))
+    plot_selection_checkbox = widgets.CheckButtons(
+        plot_selection_checkbox_axes,
+        labels=list(sorted(set(data["symbol"]))),
+        actives=[True, True] + [False] * (len(set(data["symbol"])) - 2)
+        )
+    plot_selection_queue = sorted(set(data["symbol"]))[:2]
+
+    def toggle_plot(label):
+        if len(plot_selection_queue) != 2:
+            return
+        if label not in plot_selection_queue:
+            removed = plot_selection_queue.pop(0)
+            plot_selection_checkbox.set_active(sorted(set(data["symbol"])).index(removed), state=False)
+            plot_selection_checkbox.set_active(sorted(set(data["symbol"])).index(label), state=True)
+            plot_selection_queue.append(label)
+
+            axes[0, 1].clear()
+            axes[1, 1].clear()
+            ax_master.clear()
+            for artist in kwargs.values():
+                artist.clear()
+
+            for plot, symbol in enumerate(plot_selection_queue):
+                if "price_artists" in kwargs.keys():
+                    _plot_trade_data(
+                        data=data,
+                        plot=plot,
+                        symbol=symbol,
+                        axes=axes,
+                        ax_master=ax_master,
+                        price_artists=kwargs["price_artists"],
+                        price_artists_data_raw=kwargs["price_artists_data_raw"],
+                        quantity_artists=kwargs["quantity_artists"],
+                        quantity_artists_data_raw=kwargs["quantity_artists_data_raw"],
+                        master_artists=kwargs["master_artists"]
+                    )
+            fig.canvas.draw_idle()
+
+    plot_selection_checkbox.on_clicked(toggle_plot)
+    return plot_selection_checkbox
+
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
+
+def _plot_trade_data(
+        data: pd.DataFrame,
+        plot: int,
+        symbol: str,
+        axes: np.ndarray,
+        ax_master: Axes,
+        price_artists: list,
+        price_artists_data_raw: list,
+        quantity_artists: list,
+        quantity_artists_data_raw: list,
+        master_artists: list
+        ):
+    """Plot price and quantity data for a single trade item in a subplot,
+    and add the price series to the master plot.
+
+    Args:
+        data: The full trade data DataFrame.
+        plot: The column index of the subplot to use for this item.
+        symbol: The trade item symbol to filter the data by.
+        axes: The array of subplot axes.
+        ax_master: The master axis for plotting all items together.
+        price_artists: Mutable list extended with the line artist(s) for the
+        price series.
+        price_artists_data_raw: Mutable list extended with the raw price data
+        for this item.
+        quantity_artists: Mutable list extended with the line artist(s) for the
+        quantity series.
+        quantity_artists_data_raw: Mutable list extended with the raw quantity
+        data for this item.
+        master_artists: Mutable list extended with the line artist(s) for the
+        price series on the master plot.
+    """
+    mask = data["symbol"] == symbol
+    # set shared axis data
+    axes[0, plot].set_title(symbol)  # type: ignore
+    axes[1, plot].set_xlabel("Timestamp")  # type: ignore
+    timestamps = data.loc[mask, "timestamp"].to_list()
+
+    # plot the trade data
+    price_artists_data_raw.append(data.loc[mask, "price"].to_list())
+    _plot_data(
+        axis=axes[0, plot],  # type: ignore
+        axis_color="green",
+        title="price",
+        title_color="green",
+        timestamps=timestamps,
+        data=price_artists_data_raw[-1],
+        data_label="price",
+        data_color="green",
+        artists=price_artists
+        )
+
+    # plot the quantity data
+    quantity_artists_data_raw.append(data.loc[mask, "quantity"].to_list())
+    _plot_data(
+        axis=axes[1, plot],  # type: ignore
+        axis_color="blue",
+        title="quantity",
+        title_color="blue",
+        timestamps=timestamps,
+        data=quantity_artists_data_raw[-1],
+        data_label="quantity",
+        data_color="blue",
+        artists=quantity_artists
+        )
+
+    # plot the price on the master plot
+    master_artists.extend(
+            ax_master.plot(
+                timestamps,
+                price_artists_data_raw[-1],
+                label=symbol,
+                picker=8
+            )
+        )
+
 
 def _analyze_trade_data(
         data: pd.DataFrame,
@@ -241,7 +368,7 @@ def _analyze_trade_data(
     fig, axes, ax_master, control_axes = _make_plots(
             "Trade Data Analysis",
             2,
-            len(set(data["symbol"])),
+            2,
             )
 
     # Create arrays to store each artist for rendering the cursors
@@ -252,50 +379,19 @@ def _analyze_trade_data(
     master_artists = []
 
     # render each individual trade item in a subplot
-    for plot, symbol in enumerate(sorted(set(data["symbol"]))):
-        mask = data["symbol"] == symbol
-        # set shared axis data
-        axes[0, plot].set_title(symbol)  # type: ignore
-        axes[1, plot].set_xlabel("Timestamp")  # type: ignore
-        timestamps = data.loc[mask, "timestamp"].to_list()
-
-        # plot the trade data
-        price_artists_data_raw.append(data.loc[mask, "price"].to_list())
-        _plot_data(
-            axis=axes[0, plot],  # type: ignore
-            axis_color="green",
-            title="price",
-            title_color="green",
-            timestamps=timestamps,
-            data=price_artists_data_raw[-1],
-            data_label="price",
-            data_color="green",
-            artists=price_artists
-            )
-
-        # plot the quantity data
-        quantity_artists_data_raw.append(data.loc[mask, "quantity"].to_list())
-        _plot_data(
-            axis=axes[1, plot],  # type: ignore
-            axis_color="blue",
-            title="quantity",
-            title_color="blue",
-            timestamps=timestamps,
-            data=quantity_artists_data_raw[-1],
-            data_label="quantity",
-            data_color="blue",
-            artists=quantity_artists
-            )
-
-        # plot the price on the master plot
-        master_artists.extend(
-                ax_master.plot(
-                    timestamps,
-                    price_artists_data_raw[-1],
-                    label=symbol,
-                    picker=8
-                )
-            )
+    for plot, symbol in enumerate(sorted(set(data["symbol"]))[:2]):
+        _plot_trade_data(
+            data=data,
+            plot=plot,
+            symbol=symbol,
+            axes=axes,
+            ax_master=ax_master,
+            price_artists=price_artists,
+            price_artists_data_raw=price_artists_data_raw,
+            quantity_artists=quantity_artists,
+            quantity_artists_data_raw=quantity_artists_data_raw,
+            master_artists=master_artists
+        )
 
     # create cursor for the price plot
     price_cursor = mplcursors.cursor(
@@ -339,12 +435,26 @@ def _analyze_trade_data(
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
-    _ = _denoise_gui(
+    # Render control panel
+    r_, t1_, t2_ = _denoise_gui(
         fig,
         control_axes,
         artists_list=[price_artists, quantity_artists, master_artists],
         raw_data_list=[price_artists_data_raw, quantity_artists_data_raw, price_artists_data_raw]
         )
+    pc_ = _plot_selection_gui(
+        fig,
+        axes,
+        ax_master,
+        control_axes,
+        data,
+        price_artists=price_artists,
+        price_artists_data_raw=price_artists_data_raw,
+        quantity_artists=quantity_artists,
+        quantity_artists_data_raw=quantity_artists_data_raw,
+        master_artists=master_artists
+    )
+
     # actually plot everything
     ax_master.legend()
     plt.tight_layout()
