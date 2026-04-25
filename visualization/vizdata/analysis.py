@@ -209,6 +209,7 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
 
     button.on_clicked(change_denoise)
     passes.on_submit(change_denoise)
+    alpha.on_submit(change_denoise)
 
     return button, passes, alpha
 
