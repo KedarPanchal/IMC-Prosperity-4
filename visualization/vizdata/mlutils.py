@@ -17,13 +17,21 @@ from sklearn.decomposition import PCA
 
 # -- PLOTTING -----------------------------------------------------------------
 
-def make_plot(title: str):
+def make_plot(title: str, rows: int):
     """Create a figure with a grid layout for an ML
     visualization.
+
+    Args:
+        title: The title of the plot.
+        rows: The number of rows in the grid layout (number of data subplots).
+
+    Returns:
+        A tuple containing the figure, a list of data axes, and the control 
+        axes.
     """
     fig = plt.figure(figsize=(16, 8))
     gs = gridspec.GridSpec(
-        nrows=1,
+        nrows=rows,
         ncols=2,
         figure=fig,
         left=0.05,
@@ -41,12 +49,14 @@ def make_plot(title: str):
 
     fig.suptitle(title)
 
-    control_axes = fig.add_subplot(gs[0, 0])
+    control_axes = fig.add_subplot(gs[:, 0])
     control_axes.set_xticks([])
     control_axes.set_yticks([])
     control_axes.set_frame_on(False)
 
-    data_axes = fig.add_subplot(gs[0, 1])
+    data_axes = []
+    for r in range(rows):
+        data_axes.append(fig.add_subplot(gs[r, 1]))
 
     return fig, data_axes, control_axes
 
@@ -92,6 +102,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
 
     Args:
         files: List of file paths to collate data from.
+
     Returns:
         A single DataFrame containing the collated data from all valid files.
     """
@@ -218,6 +229,7 @@ def preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.
 
     Args:
         data: DataFrame containing the raw trading data to preprocess.
+
     Returns:
         A tuple containing the following elements:
         - A DataFrame with the original data (with timestamp columns dropped).

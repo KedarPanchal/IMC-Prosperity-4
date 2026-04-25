@@ -138,7 +138,9 @@ def classify_bots(data: pd.DataFrame) -> None:
     pca_features = pca.fit_transform(scaled)
 
     # Perform k means clustering and plot the results
-    fig, axes, control_axes = make_plot("Trading Bot Classification")
+    fig, axes, control_axes = make_plot("Trading Bot Classification", 1)
+    # Since we only have 1 plot, just index into the first element
+    axes = axes[0]  # type: ignore
     kmeans, scatter, colormap = _plot_data(axes, pca_features, 10, seed=0)
 
     # Create cursor for hover annotations
