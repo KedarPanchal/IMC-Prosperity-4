@@ -171,19 +171,19 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
         The created GUI controls (buttons and text boxes) since matplotlib
         requires keeping references to them to prevent garbage collection.
     """
-    button_axes = axes.inset_axes((0.05, 0.4, 0.9, 0.15))
+    button_axes = axes.inset_axes((0.05, 0.8, 0.9, 0.15))
     button = widgets.RadioButtons(
             button_axes,
             labels=list(DENOISING_STRATEGIES.keys()),
             active=list(DENOISING_STRATEGIES.keys()).index("identity")
             )
-    passes_axes = axes.inset_axes((0.25, 0.35, 0.7, 0.04))
+    passes_axes = axes.inset_axes((0.25, 0.75, 0.7, 0.04))
     passes = widgets.TextBox(
             passes_axes,
             label="Passes: ",
             initial="6",
             )
-    alpha_axes = axes.inset_axes((0.52, 0.3, 0.43, 0.04))
+    alpha_axes = axes.inset_axes((0.52, 0.7, 0.43, 0.04))
     alpha = widgets.TextBox(
             alpha_axes,
             label="Alpha (EMA only): ",
@@ -204,8 +204,8 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
                 for artist, data in zip(artists, raw_data):
                     artist.set_ydata(denoiser(data))
             fig.canvas.draw_idle()
-        except ValueError:
-            print(f"Alpha out of range (0, 1) for EMA denoising; got {alpha_value}. Please enter a valid alpha value.")
+        except ValueError as e:
+            print(e)
 
     button.on_clicked(change_denoise)
     passes.on_submit(change_denoise)
@@ -214,7 +214,187 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
     return button, passes, alpha
 
 
+def _plot_selection_gui(
+        fig: Figure,
+        axes: np.ndarray,
+        ax_master: Axes,
+        control_axes: Axes,
+        data: pd.DataFrame,
+        **kwargs
+        ):
+    """Renders a GUI with checkboxes for selecting which trade items to display
+    in the subplots and master plot.
+
+    Args:
+        fig: The matplotlib figure to which the GUI will be attached.
+        axes: The array of subplot axes for individual trade items.
+        ax_master: The master axis for plotting all items together.
+        control_axes: The axis on which to place the GUI controls.
+        data: The full trade data DataFrame, used to determine the unique trade
+        items and filter the data when updating the plots. Assumed to have 2+
+        products/symbols to enable toggling.
+        kwargs: The line artists and raw data lists for the plot artists.
+        This is what determines whether to plot trade data (price and quantity)
+        or price data (bid/ask/fair price and volumes).
+    """
+    try:
+        sorted_set = sorted(set(data["symbol"]))
+    except KeyError:
+        sorted_set = sorted(set(data["product"]))
+
+    plot_selection_checkbox_axes = control_axes.inset_axes((0.05, 0.3, 0.9, 0.35))
+    plot_selection_checkbox = widgets.CheckButtons(
+        plot_selection_checkbox_axes,
+        labels=list(sorted_set),
+        actives=[True, True] + [False] * (len(sorted_set) - 2)
+        )
+    plot_selection_queue = sorted_set[:2]  # Always length 2
+
+    def toggle_plot(label):
+        if len(plot_selection_queue) != 2:
+            return
+        if label not in plot_selection_queue:
+            removed = plot_selection_queue.pop(0)
+            plot_selection_checkbox.set_active(sorted_set.index(removed), state=False)
+            plot_selection_checkbox.set_active(sorted_set.index(label), state=True)
+            plot_selection_queue.append(label)
+
+            axes[0, 0].clear()
+            axes[0, 1].clear()
+            axes[1, 0].clear()
+            axes[1, 1].clear()
+            ax_master.clear()
+            for artist in kwargs.values():
+                artist.clear()
+
+            for plot, symbol in enumerate(plot_selection_queue):
+                if "price_artists" in kwargs.keys():
+                    _plot_trade_data(
+                        data=data,
+                        plot=plot,
+                        symbol=symbol,
+                        axes=axes,
+                        ax_master=ax_master,
+                        price_artists=kwargs["price_artists"],
+                        price_artists_data_raw=kwargs["price_artists_data_raw"],
+                        quantity_artists=kwargs["quantity_artists"],
+                        quantity_artists_data_raw=kwargs["quantity_artists_data_raw"],
+                        master_artists=kwargs["master_artists"]
+                    )
+                else:
+                    _plot_price_data(
+                        data=data,
+                        plot=plot,
+                        symbol=symbol,
+                        axes=axes,
+                        ax_master=ax_master,
+                        bid_price_artists=kwargs["bid_price_artists"],
+                        bid_price_artists_data_raw=kwargs["bid_price_artists_data_raw"],
+                        ask_price_artists=kwargs["ask_price_artists"],
+                        ask_price_artists_data_raw=kwargs["ask_price_artists_data_raw"],
+                        mid_price_artists=kwargs["mid_price_artists"],
+                        mid_price_artists_data_raw=kwargs["mid_price_artists_data_raw"],
+                        bid_quantity_artists=kwargs["bid_quantity_artists"],
+                        bid_quantity_artists_data_raw=kwargs["bid_quantity_artists_data_raw"],
+                        ask_quantity_artists=kwargs["ask_quantity_artists"],
+                        ask_quantity_artists_data_raw=kwargs["ask_quantity_artists_data_raw"],
+                        bid_master_artists=kwargs["bid_master_artists"],
+                        ask_master_artists=kwargs["ask_master_artists"],
+                        mid_master_artists=kwargs["mid_master_artists"]
+                        )
+            ax_master.legend()
+            fig.canvas.draw_idle()
+        else:
+            # Store old queue and reset to trigger base case on the next toggle
+            old = plot_selection_queue.copy()
+            plot_selection_queue.clear()
+            # Re-enable the checkbox for the removed item since we shouldn't directly deselect an already checked item
+            plot_selection_checkbox.set_active(sorted_set.index(label), state=True)
+            # Restore queue to original state
+            plot_selection_queue.extend(old)
+
+    plot_selection_checkbox.on_clicked(toggle_plot)
+    return plot_selection_checkbox
+
+
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
+
+def _plot_trade_data(
+        data: pd.DataFrame,
+        plot: int,
+        symbol: str,
+        axes: np.ndarray,
+        ax_master: Axes,
+        price_artists: list,
+        price_artists_data_raw: list,
+        quantity_artists: list,
+        quantity_artists_data_raw: list,
+        master_artists: list
+        ):
+    """Plot price and quantity data for a single trade item in a subplot,
+    and add the price series to the master plot.
+
+    Args:
+        data: The full trade data DataFrame.
+        plot: The column index of the subplot to use for this item.
+        symbol: The trade item symbol to filter the data by.
+        axes: The array of subplot axes.
+        ax_master: The master axis for plotting all items together.
+        price_artists: Mutable list extended with the line artist(s) for the
+        price series.
+        price_artists_data_raw: Mutable list extended with the raw price data
+        for this item.
+        quantity_artists: Mutable list extended with the line artist(s) for the
+        quantity series.
+        quantity_artists_data_raw: Mutable list extended with the raw quantity
+        data for this item.
+        master_artists: Mutable list extended with the line artist(s) for the
+        price series on the master plot.
+    """
+    mask = data["symbol"] == symbol
+    # set shared axis data
+    axes[0, plot].set_title(symbol)  # type: ignore
+    axes[1, plot].set_xlabel("Timestamp")  # type: ignore
+    timestamps = data.loc[mask, "timestamp"].to_list()
+
+    # plot the trade data
+    price_artists_data_raw.append(data.loc[mask, "price"].to_list())
+    _plot_data(
+        axis=axes[0, plot],  # type: ignore
+        axis_color="green",
+        title="price",
+        title_color="green",
+        timestamps=timestamps,
+        data=price_artists_data_raw[-1],
+        data_label="price",
+        data_color="green",
+        artists=price_artists
+        )
+
+    # plot the quantity data
+    quantity_artists_data_raw.append(data.loc[mask, "quantity"].to_list())
+    _plot_data(
+        axis=axes[1, plot],  # type: ignore
+        axis_color="blue",
+        title="quantity",
+        title_color="blue",
+        timestamps=timestamps,
+        data=quantity_artists_data_raw[-1],
+        data_label="quantity",
+        data_color="blue",
+        artists=quantity_artists
+        )
+
+    # plot the price on the master plot
+    master_artists.extend(
+            ax_master.plot(
+                timestamps,
+                price_artists_data_raw[-1],
+                label=symbol,
+                picker=8
+            )
+        )
+
 
 def _analyze_trade_data(
         data: pd.DataFrame,
@@ -241,7 +421,7 @@ def _analyze_trade_data(
     fig, axes, ax_master, control_axes = _make_plots(
             "Trade Data Analysis",
             2,
-            len(set(data["symbol"])),
+            2,
             )
 
     # Create arrays to store each artist for rendering the cursors
@@ -252,50 +432,19 @@ def _analyze_trade_data(
     master_artists = []
 
     # render each individual trade item in a subplot
-    for plot, symbol in enumerate(sorted(set(data["symbol"]))):
-        mask = data["symbol"] == symbol
-        # set shared axis data
-        axes[0, plot].set_title(symbol)  # type: ignore
-        axes[1, plot].set_xlabel("Timestamp")  # type: ignore
-        timestamps = data.loc[mask, "timestamp"].to_list()
-
-        # plot the trade data
-        price_artists_data_raw.append(data.loc[mask, "price"].to_list())
-        _plot_data(
-            axis=axes[0, plot],  # type: ignore
-            axis_color="green",
-            title="price",
-            title_color="green",
-            timestamps=timestamps,
-            data=price_artists_data_raw[-1],
-            data_label="price",
-            data_color="green",
-            artists=price_artists
-            )
-
-        # plot the quantity data
-        quantity_artists_data_raw.append(data.loc[mask, "quantity"].to_list())
-        _plot_data(
-            axis=axes[1, plot],  # type: ignore
-            axis_color="blue",
-            title="quantity",
-            title_color="blue",
-            timestamps=timestamps,
-            data=quantity_artists_data_raw[-1],
-            data_label="quantity",
-            data_color="blue",
-            artists=quantity_artists
-            )
-
-        # plot the price on the master plot
-        master_artists.extend(
-                ax_master.plot(
-                    timestamps,
-                    price_artists_data_raw[-1],
-                    label=symbol,
-                    picker=8
-                )
-            )
+    for plot, symbol in enumerate(sorted(set(data["symbol"]))[:2]):
+        _plot_trade_data(
+            data=data,
+            plot=plot,
+            symbol=symbol,
+            axes=axes,
+            ax_master=ax_master,
+            price_artists=price_artists,
+            price_artists_data_raw=price_artists_data_raw,
+            quantity_artists=quantity_artists,
+            quantity_artists_data_raw=quantity_artists_data_raw,
+            master_artists=master_artists
+        )
 
     # create cursor for the price plot
     price_cursor = mplcursors.cursor(
@@ -339,16 +488,208 @@ def _analyze_trade_data(
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
-    _ = _denoise_gui(
+    # Render control panel
+    r_, t1_, t2_ = _denoise_gui(
         fig,
         control_axes,
         artists_list=[price_artists, quantity_artists, master_artists],
         raw_data_list=[price_artists_data_raw, quantity_artists_data_raw, price_artists_data_raw]
         )
+    pc_ = _plot_selection_gui(
+        fig,
+        axes,
+        ax_master,
+        control_axes,
+        data,
+        price_artists=price_artists,
+        price_artists_data_raw=price_artists_data_raw,
+        quantity_artists=quantity_artists,
+        quantity_artists_data_raw=quantity_artists_data_raw,
+        master_artists=master_artists
+    )
+
     # actually plot everything
     ax_master.legend()
     plt.tight_layout()
     plt.show()
+
+
+def _plot_price_data(
+        data: pd.DataFrame,
+        plot: int,
+        symbol: str,
+        axes: np.ndarray,
+        ax_master: Axes,
+        bid_price_artists: list,
+        bid_price_artists_data_raw: list,
+        ask_price_artists: list,
+        ask_price_artists_data_raw: list,
+        mid_price_artists: list,
+        mid_price_artists_data_raw: list,
+        bid_quantity_artists: list,
+        bid_quantity_artists_data_raw: list,
+        ask_quantity_artists: list,
+        ask_quantity_artists_data_raw: list,
+        bid_master_artists: list,
+        ask_master_artists: list,
+        mid_master_artists: list
+        ):
+    """Plot bid/ask/fair price and volumes for a single price item in a subplot, and add the price series to the master plot.
+
+    Args:
+        data: The full price data DataFrame.
+        plot: The column index of the subplot to use for this item.
+        symbol: The price item symbol to filter the data by.
+        axes: The array of subplot axes.
+        ax_master: The master axis for plotting all items together.
+        bid_price_artists: Mutable list extended with the line artist(s) for
+        them bid price series.
+        bid_price_artists_data_raw: Mutable list extended with the raw bid
+        price data for this item.
+        ask_price_artists: Mutable list extended with the line artist(s) for
+        them ask price series.
+        ask_price_artists_data_raw: Mutable list extended with the raw ask
+        price data for this item.
+        mid_price_artists: Mutable list extended with the line artist(s) for
+        them mid price series.
+        mid_price_artists_data_raw: Mutable list extended with the raw mid
+        price data for this item.
+        bid_quantity_artists: Mutable list extended with the line artist(s)
+        for them bid quantity series.
+        bid_quantity_artists_data_raw: Mutable list extended with the raw bid
+        quantity data for this item.
+        ask_quantity_artists: Mutable list extended with the line artist(s) for
+        them ask quantity series.
+        ask_quantity_artists_data_raw: Mutable list extended with the raw ask
+        quantity data for this item.
+        bid_master_artists: Mutable list extended with the line artist(s) for
+        the bid price series on the master plot.
+        ask_master_artists: Mutable list extended with the line artist(s) for
+        the ask price series on the master plot.
+        mid_master_artists: Mutable list extended with the line artist(s) for
+        the mid price series on the master plot.
+    """
+    # Compute masks for rows with nonzero bid/ask volumes and mid price
+    # Avoid plotting zero values to reduce noise
+    nonzero_bids = pd.notna(
+            data["bid_volume_1"] +
+            data["bid_volume_2"] +
+            data["bid_volume_3"]
+            ) & (
+            data["bid_volume_1"] +
+            data["bid_volume_2"] +
+            data["bid_volume_3"] > 0
+            )
+    nonzero_asks = pd.notna(
+            data["ask_volume_1"] +
+            data["ask_volume_2"] +
+            data["ask_volume_3"]
+            ) & (
+                data["ask_volume_1"] +
+                data["ask_volume_2"] +
+                data["ask_volume_3"] > 0
+                )
+    # No mid volume, so check the price to see if information is available
+    nonzero_mid = data["mid_price"] > 0
+
+    mask = symbol == data["product"]
+    # Set shared axis data
+    axes[0, plot].set_title(symbol)  # type: ignore
+    axes[1, plot].set_xlabel("Timestamp")  # type: ignore
+
+    bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
+    ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
+    mid_timestamps = data.loc[mask & nonzero_mid, "timestamp"].to_list()
+
+    # Plot the bid/ask/fair value price data
+    bid_price_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
+    ask_price_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
+    mid_price_artists_data_raw.append(data.loc[mask & nonzero_mid, "mid_price"].to_list())
+    _plot_data(
+        axis=axes[0, plot],  # type: ignore
+        axis_color="green",
+        title="Bid/Ask Prices",
+        title_color="green",
+        timestamps=bid_timestamps,
+        data=bid_price_artists_data_raw[-1],
+        data_label="bid",
+        data_color="green",
+        artists=bid_price_artists,
+        show_legend=True
+        )
+    _plot_data(
+        axis=axes[0, plot],  # type: ignore
+        timestamps=ask_timestamps,
+        data=ask_price_artists_data_raw[-1],
+        data_label="ask",
+        data_color="red",
+        artists=ask_price_artists,
+        show_legend=True
+        )
+    _plot_data(
+        axis=axes[0, plot],  # type: ignore
+        timestamps=mid_timestamps,
+        data=mid_price_artists_data_raw[-1],
+        data_label="fair value",
+        data_color="blue",
+        artists=mid_price_artists,
+        show_legend=True
+        )
+
+    # Plot the bid/ask quantity data
+    bid_quantity_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
+    ask_quantity_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
+    _plot_data(
+        axis=axes[1, plot],  # type: ignore
+        axis_color="blue",
+        title="Bid/Ask Volume",
+        title_color="blue",
+        timestamps=bid_timestamps,
+        data=bid_quantity_artists_data_raw[-1],
+        data_label="bid",
+        data_color="blue",
+        artists=bid_quantity_artists,
+        show_legend=True
+        )
+    _plot_data(
+        axis=axes[1, plot],  # type: ignore
+        timestamps=ask_timestamps,
+        data=ask_quantity_artists_data_raw[-1],
+        data_label="ask",
+        data_color="orange",
+        artists=ask_quantity_artists,
+        show_legend=True
+        )
+
+    # Plot the bid/ask/fair value price on the master plot
+    bid_master_artists.extend(
+            ax_master.plot(
+                bid_timestamps,
+                bid_price_artists_data_raw[-1],
+                linewidth=0.8,
+                label=f"{symbol} bid",
+                picker=8
+            )
+        )
+    ask_master_artists.extend(
+            ax_master.plot(
+                ask_timestamps,
+                ask_price_artists_data_raw[-1],
+                linewidth=0.8,
+                label=f"{symbol} ask",
+                picker=8
+            )
+        )
+    mid_master_artists.extend(
+            ax_master.plot(
+                mid_timestamps,
+                mid_price_artists_data_raw[-1],
+                linewidth=0.8,
+                label=f"{symbol} fair value",
+                color="blue",
+                picker=8
+            )
+        )
 
 
 def _analyze_price_data(data: pd.DataFrame):
@@ -378,7 +719,7 @@ def _analyze_price_data(data: pd.DataFrame):
     fig, axes, ax_master, control_axes = _make_plots(
             "Price Data Analysis",
             2,
-            len(set(data["product"])),
+            2,
             )
 
     # Create arrays to store each artist for rendering the cursors
@@ -396,130 +737,28 @@ def _analyze_price_data(data: pd.DataFrame):
     ask_master_artists = []
     mid_master_artists = []
 
-    # Compute masks for rows with nonzero bid/ask volumes and mid price
-    # Avoid plotting zero values to reduce noise
-    nonzero_bids = pd.notna(
-            data["bid_volume_1"] +
-            data["bid_volume_2"] +
-            data["bid_volume_3"]
-            ) & (
-            data["bid_volume_1"] +
-            data["bid_volume_2"] +
-            data["bid_volume_3"] > 0
-            )
-    nonzero_asks = pd.notna(
-            data["ask_volume_1"] +
-            data["ask_volume_2"] +
-            data["ask_volume_3"]
-            ) & (
-                data["ask_volume_1"] +
-                data["ask_volume_2"] +
-                data["ask_volume_3"] > 0
-                )
-    # No mid volume, so check the price to see if information is available
-    nonzero_mid = data["mid_price"] > 0
-
     # Render each individual price item in a subplot
-    for plot, symbol in enumerate(sorted(set(data["product"]))):
-        mask = symbol == data["product"]
-        # Set shared axis data
-        axes[0, plot].set_title(symbol)  # type: ignore
-        axes[1, plot].set_xlabel("Timestamp")  # type: ignore
-
-        bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
-        ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
-        mid_timestamps = data.loc[mask & nonzero_mid, "timestamp"].to_list()
-
-        # Plot the bid/ask/fair value price data
-        bid_price_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
-        ask_price_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
-        mid_price_artists_data_raw.append(data.loc[mask & nonzero_mid, "mid_price"].to_list())
-        _plot_data(
-            axis=axes[0, plot],  # type: ignore
-            axis_color="green",
-            title="Bid/Ask Prices",
-            title_color="green",
-            timestamps=bid_timestamps,
-            data=bid_price_artists_data_raw[-1],
-            data_label="bid",
-            data_color="green",
-            artists=bid_price_artists,
-            show_legend=True
-            )
-        _plot_data(
-            axis=axes[0, plot],  # type: ignore
-            timestamps=ask_timestamps,
-            data=ask_price_artists_data_raw[-1],
-            data_label="ask",
-            data_color="red",
-            artists=ask_price_artists,
-            show_legend=True
-            )
-        _plot_data(
-            axis=axes[0, plot],  # type: ignore
-            timestamps=mid_timestamps,
-            data=mid_price_artists_data_raw[-1],
-            data_label="fair value",
-            data_color="blue",
-            artists=mid_price_artists,
-            show_legend=True
-            )
-
-        # Plot the bid/ask quantity data
-        bid_quantity_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
-        ask_quantity_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
-        _plot_data(
-            axis=axes[1, plot],  # type: ignore
-            axis_color="blue",
-            title="Bid/Ask Volume",
-            title_color="blue",
-            timestamps=bid_timestamps,
-            data=bid_quantity_artists_data_raw[-1],
-            data_label="bid",
-            data_color="blue",
-            artists=bid_quantity_artists,
-            show_legend=True
-            )
-        _plot_data(
-            axis=axes[1, plot],  # type: ignore
-            timestamps=ask_timestamps,
-            data=ask_quantity_artists_data_raw[-1],
-            data_label="ask",
-            data_color="orange",
-            artists=ask_quantity_artists,
-            show_legend=True
-            )
-
-        # Plot the bid/ask/fair value price on the master plot
-        bid_master_artists.extend(
-                ax_master.plot(
-                    bid_timestamps,
-                    bid_price_artists_data_raw[-1],
-                    linewidth=0.8,
-                    label=f"{symbol} bid",
-                    picker=8
-                )
-            )
-        ask_master_artists.extend(
-                ax_master.plot(
-                    ask_timestamps,
-                    ask_price_artists_data_raw[-1],
-                    linewidth=0.8,
-                    label=f"{symbol} ask",
-                    picker=8
-                )
-            )
-        mid_master_artists.extend(
-                ax_master.plot(
-                    mid_timestamps,
-                    mid_price_artists_data_raw[-1],
-                    linewidth=0.8,
-                    label=f"{symbol} fair value",
-                    color="blue",
-                    picker=8
-                )
-            )
-
+    for plot, symbol in enumerate(sorted(set(data["product"]))[:2]):
+        _plot_price_data(
+            data=data,
+            plot=plot,
+            symbol=symbol,
+            axes=axes,
+            ax_master=ax_master,
+            bid_price_artists=bid_price_artists,
+            bid_price_artists_data_raw=bid_price_artists_data_raw,
+            ask_price_artists=ask_price_artists,
+            ask_price_artists_data_raw=ask_price_artists_data_raw,
+            mid_price_artists=mid_price_artists,
+            mid_price_artists_data_raw=mid_price_artists_data_raw,
+            bid_quantity_artists=bid_quantity_artists,
+            bid_quantity_artists_data_raw=bid_quantity_artists_data_raw,
+            ask_quantity_artists=ask_quantity_artists,
+            ask_quantity_artists_data_raw=ask_quantity_artists_data_raw,
+            bid_master_artists=bid_master_artists,
+            ask_master_artists=ask_master_artists,
+            mid_master_artists=mid_master_artists
+        )
     # Create cursor for the price plot
     price_cursor = mplcursors.cursor(
             [*bid_price_artists, *ask_price_artists, *mid_price_artists],
@@ -593,7 +832,7 @@ def _analyze_price_data(data: pd.DataFrame):
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
     # Render control panel
-    _ = _denoise_gui(
+    r_, t1_, t2_ = _denoise_gui(
         fig,
         control_axes,
         artists_list=[
@@ -617,13 +856,35 @@ def _analyze_price_data(data: pd.DataFrame):
             mid_price_artists_data_raw,
         ]
         )
+    qc_ = _plot_selection_gui(
+        fig,
+        axes,
+        ax_master,
+        control_axes,
+        data,
+        bid_price_artists=bid_price_artists,
+        bid_price_artists_data_raw=bid_price_artists_data_raw,
+        ask_price_artists=ask_price_artists,
+        ask_price_artists_data_raw=ask_price_artists_data_raw,
+        mid_price_artists=mid_price_artists,
+        mid_price_artists_data_raw=mid_price_artists_data_raw,
+        bid_quantity_artists=bid_quantity_artists,
+        bid_quantity_artists_data_raw=bid_quantity_artists_data_raw,
+        ask_quantity_artists=ask_quantity_artists,
+        ask_quantity_artists_data_raw=ask_quantity_artists_data_raw,
+        bid_master_artists=bid_master_artists,
+        ask_master_artists=ask_master_artists,
+        mid_master_artists=mid_master_artists
+        )
     bid_ask_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
+    # Implemented as a string to list map so the artists are shallow copies
+    # This allows for synchronization with the plot selection GUI
     bid_ask_mapping = {
-        "Show bid price": bid_price_artists + bid_master_artists,
-        "Show ask price": ask_price_artists + ask_master_artists,
-        "Show fair value price": mid_price_artists + mid_master_artists,
-        "Show bid volume": bid_quantity_artists,
-        "Show ask volume": ask_quantity_artists,
+        "Show bid price": [bid_price_artists, bid_master_artists],
+        "Show ask price": [ask_price_artists, ask_master_artists],
+        "Show fair value price": [mid_price_artists, mid_master_artists],
+        "Show bid volume": [bid_quantity_artists],
+        "Show ask volume": [ask_quantity_artists],
     }
     bid_ask_checkbox = widgets.CheckButtons(
         bid_ask_checkbox_axes,
@@ -632,8 +893,9 @@ def _analyze_price_data(data: pd.DataFrame):
         )
 
     def toggle_bid_ask(label):
-        for artist in bid_ask_mapping[label]:
-            artist.set_visible(not artist.get_visible())
+        for artists in bid_ask_mapping[label]:
+            for artist in artists:
+                artist.set_visible(not artist.get_visible())
         fig.canvas.draw_idle()
 
     bid_ask_checkbox.on_clicked(toggle_bid_ask)

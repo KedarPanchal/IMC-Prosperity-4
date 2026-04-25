@@ -40,10 +40,13 @@ def main():
 
     files = []
     for file in args.files:
-        if os.path.isfile(file):
+        if os.path.isfile(file) and file.endswith(".csv"):
             files.append(file)
         else:
-            parser.error(f"Unknown file: {file}")
+            if os.path.isfile(file):
+                parser.error(f"File is not a CSV: {file}")
+            else:
+                parser.error(f"Unknown file: {file}")
 
     if args.mode == "analysis":
         analyze_data(files)
