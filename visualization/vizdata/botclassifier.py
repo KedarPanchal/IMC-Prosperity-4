@@ -62,11 +62,11 @@ def _plot_data(data_axes: Axes, data: np.ndarray, k: int, seed: int):
 
 
 def _kmeans_gui(
-    fig: Figure,
-    data: np.ndarray,
-    control_axes: Axes,
-    data_axes: Axes
-    ):
+        fig: Figure,
+        data: np.ndarray,
+        control_axes: Axes,
+        data_axes: Axes
+        ):
     """Create a GUI for adjusting the number of clusters (k) and random seed
     for k-means clustering.
 
@@ -146,7 +146,6 @@ def classify_bots(data: pd.DataFrame) -> None:
     # Create cursor for hover annotations
     COL_NAMES = {
         "symbol": "Symbol",
-        "symbol_INTARIAN_PEPPER_ROOT": "Symbol",
         "midprice_open": "Mid Price Open",
         "midprice_close": "Mid Price Close",
         "midprice_low": "Mid Price Low",

@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import warnings
 
 from vizdata.analysis import analyze_data
 from vizdata.mlutils import collate_data
@@ -48,9 +49,9 @@ def main():
             files.append(file)
         else:
             if os.path.isfile(file):
-                parser.error(f"File is not a CSV: {file}")
+                warnings.warn(f"File is not a CSV, skipping: {file}")
             else:
-                parser.error(f"Unknown file: {file}")
+                warnings.warn(f"Unknown file, skipping: {file}")
 
     if args.mode == "analysis":
         analyze_data(files)

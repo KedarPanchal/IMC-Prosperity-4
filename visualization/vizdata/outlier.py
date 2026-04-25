@@ -74,6 +74,9 @@ def detect_outliers(data: pd.DataFrame):
         tree_count=100,
         seed=0
         )
+
+    # Create cursor for hover annotations
+
     # Show the PCA component contributions
     pca_contributions(pca, features, control_axes)
     # Actually plot the outliers
