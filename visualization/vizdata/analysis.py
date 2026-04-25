@@ -247,7 +247,7 @@ def _plot_selection_gui(
         labels=list(sorted_set),
         actives=[True, True] + [False] * (len(sorted_set) - 2)
         )
-    plot_selection_queue = sorted_set[:2]
+    plot_selection_queue = sorted_set[:2]  # Always length 2
 
     def toggle_plot(label):
         if len(plot_selection_queue) != 2:
@@ -301,6 +301,14 @@ def _plot_selection_gui(
                         )
             ax_master.legend()
             fig.canvas.draw_idle()
+        else:
+            # Store old queue and reset to trigger base case on the next toggle
+            old = plot_selection_queue.copy()
+            plot_selection_queue.clear()
+            # Re-enable the checkbox for the removed item since we shouldn't directly deselect an already checked item
+            plot_selection_checkbox.set_active(sorted_set.index(label), state=True)
+            # Restore queue to original state
+            plot_selection_queue.extend(old)
 
     plot_selection_checkbox.on_clicked(toggle_plot)
     return plot_selection_checkbox
