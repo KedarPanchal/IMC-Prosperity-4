@@ -239,7 +239,7 @@ def _analyze_trade_data(
     # The third row contain a master subplot of all the trade items
     fig, axes, ax_master, control_axes = _make_plots(
             "Trade Data Analysis",
-            3,
+            2,
             len(set(data["symbol"])),
             )
 
@@ -376,7 +376,7 @@ def _analyze_price_data(data: pd.DataFrame):
     # Row 4 contains a master subplot of all the price items
     fig, axes, ax_master, control_axes = _make_plots(
             "Price Data Analysis",
-            4,
+            2,
             len(set(data["product"])),
             )
 
@@ -423,7 +423,7 @@ def _analyze_price_data(data: pd.DataFrame):
         mask = symbol == data["product"]
         # Set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
-        axes[2, plot].set_xlabel("Timestamp")  # type: ignore
+        axes[1, plot].set_xlabel("Timestamp")  # type: ignore
 
         bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
         ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
@@ -464,12 +464,13 @@ def _analyze_price_data(data: pd.DataFrame):
             show_legend=True
             )
 
-        # Plot the bid quantity data
+        # Plot the bid/ask quantity data
         bid_quantity_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
+        ask_quantity_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title="Bid Volume",
+            title="Bid/Ask Volume",
             title_color="blue",
             timestamps=bid_timestamps,
             data=bid_quantity_artists_data_raw[-1],
@@ -479,12 +480,8 @@ def _analyze_price_data(data: pd.DataFrame):
             )
 
         # Plot the ask quantity data
-        ask_quantity_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
         _plot_data(
-            axis=axes[2, plot],  # type: ignore
-            axis_color="orange",
-            title="Ask Volume",
-            title_color="orange",
+            axis=axes[1, plot],  # type: ignore
             timestamps=ask_timestamps,
             data=ask_quantity_artists_data_raw[-1],
             data_label="ask",
