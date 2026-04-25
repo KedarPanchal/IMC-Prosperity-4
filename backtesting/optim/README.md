@@ -218,22 +218,6 @@ Fixed baseline parameters (not searched — less sensitive from prior analysis):
 
 ---
 
-## Manual challenge — Celestial Gardeners' Guild
-
-This pipeline covers **algorithmic trading only**. The manual challenge
-(submitting two bids to the Guild) is handled separately in the IMC portal.
-
-**Optimal bid strategy recap:**
-- Reserve prices are uniformly distributed in [670, 920] at increments of 5.
-- Fair sell value is 920.
-- **Bid 1**: use ~679 — captures every seller below ~680 (profit = 920 − bid).
-- **Bid 2**: compete for the "above-mean" winners. The penalty formula is
-  `((920 − avg_b2) / (920 − b2))³`. Set bid 2 near the expected mean of
-  all players' second bids (historically around 780–800) to avoid penalty
-  while staying competitive.
-
----
-
 ## Limitations and known issues
 
 1. **No `r3.py` = no backtest** — the simulator imports your algo module.
