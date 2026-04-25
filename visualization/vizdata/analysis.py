@@ -259,7 +259,9 @@ def _plot_selection_gui(
             plot_selection_checkbox.set_active(sorted_set.index(label), state=True)
             plot_selection_queue.append(label)
 
+            axes[0, 0].clear()
             axes[0, 1].clear()
+            axes[1, 0].clear()
             axes[1, 1].clear()
             ax_master.clear()
             for artist in kwargs.values():
@@ -875,12 +877,14 @@ def _analyze_price_data(data: pd.DataFrame):
         mid_master_artists=mid_master_artists
         )
     bid_ask_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
+    # Implemented as a string to list map so the artists are shallow copies
+    # This allows for synchronization with the plot selection GUI
     bid_ask_mapping = {
-        "Show bid price": bid_price_artists + bid_master_artists,
-        "Show ask price": ask_price_artists + ask_master_artists,
-        "Show fair value price": mid_price_artists + mid_master_artists,
-        "Show bid volume": bid_quantity_artists,
-        "Show ask volume": ask_quantity_artists,
+        "Show bid price": [bid_price_artists, bid_master_artists],
+        "Show ask price": [ask_price_artists, ask_master_artists],
+        "Show fair value price": [mid_price_artists, mid_master_artists],
+        "Show bid volume": [bid_quantity_artists],
+        "Show ask volume": [ask_quantity_artists],
     }
     bid_ask_checkbox = widgets.CheckButtons(
         bid_ask_checkbox_axes,
@@ -889,8 +893,9 @@ def _analyze_price_data(data: pd.DataFrame):
         )
 
     def toggle_bid_ask(label):
-        for artist in bid_ask_mapping[label]:
-            artist.set_visible(not artist.get_visible())
+        for artists in bid_ask_mapping[label]:
+            for artist in artists:
+                artist.set_visible(not artist.get_visible())
         fig.canvas.draw_idle()
 
     bid_ask_checkbox.on_clicked(toggle_bid_ask)
