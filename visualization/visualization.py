@@ -4,7 +4,8 @@ import argparse
 import os
 
 from vizdata.analysis import analyze_data
-from vizdata.botclassifier import collate_data, classify_bots
+from vizdata.mlutils import collate_data
+from vizdata.botclassifier import classify_bots
 
 
 # -- CLI ----------------------------------------------------------------------
@@ -28,9 +29,11 @@ def main():
             "--mode",
             "-m",
             dest="mode",
-            choices=["analysis", "classification"],
+            choices=["analysis", "classification", "outlier"],
             default="analysis",
-            help="Mode of operation: 'analysis' for visualization, 'classification' for bot classification"
+            help="Mode of operation: 'analysis' (default) for visualization, "
+                    "'classification' for bot detection"
+                    "'outlier' for outlier detection"
             )
     args = parser.parse_args()
 

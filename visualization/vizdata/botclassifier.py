@@ -1,13 +1,10 @@
 """Classifies trading bots based on their behavior and characteristics.
 """
-from collections import defaultdict
-import re
 
 import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import matplotlib.widgets as widgets
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
@@ -18,42 +15,10 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
+from mlutils import make_plot
+
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
-
-def _make_plot():
-    """Create a figure with a grid layout for the trading bot classification 
-    visualization.
-    """
-    fig = plt.figure(figsize=(16, 8))
-    gs = gridspec.GridSpec(
-        nrows=1,
-        ncols=2,
-        figure=fig,
-        left=0.05,
-        right=0.95,
-        top=0.95,
-        bottom=0.1,
-        wspace=0.25,
-        hspace=0.5,
-        width_ratios=[1, 3],
-        )
-    try:
-        fig.canvas.manager.set_window_title("Trading Bot Classification")  # type: ignore
-    except AttributeError:
-        print("Warning: Unable to set window title; feature may be unsupported in this environment")
-
-    fig.suptitle("Trading Bot Classification")
-
-    control_axes = fig.add_subplot(gs[0, 0])
-    control_axes.set_xticks([])
-    control_axes.set_yticks([])
-    control_axes.set_frame_on(False)
-
-    data_axes = fig.add_subplot(gs[0, 1])
-
-    return fig, data_axes, control_axes
-
 
 def _plot_data(data_axes: Axes, data: np.ndarray, k: int, seed: int):
     """Plot the trading bot data using k-means clustering and Voronoi diagrams.
@@ -182,132 +147,6 @@ def _pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
 
 # -- MAIN LOGIC ---------------------------------------------------------------
 
-def collate_data(files: list[str]) -> pd.DataFrame | None:
-    """Collate data from multiple files into a single dataset for
-    classification.
-
-    Combines data from the provided files, ensuring that only valid dataframes
-    for trading bot classification are included.
-
-    Args:
-        files: List of file paths to collate data from.
-    Returns:
-        A single DataFrame containing the collated data from all valid files.
-    """
-    # Split dataframes into trade and price dataframes by day
-    trade_dataframes = defaultdict(pd.DataFrame)
-    price_dataframes = defaultdict(pd.DataFrame)
-    day_regex = re.compile(r"(?<=day_)-?\d+")
-
-    for file in files:
-        df = pd.read_csv(file, sep=';')
-        match = day_regex.search(file)
-        if not match:
-            print(f"Warning: File {file} does not contain a valid day number")
-            continue
-        day = int(match.group())
-        if "trades" in file:
-            trade_dataframes[day] = df
-        elif "prices" in file:
-            price_dataframes[day] = df
-        else:
-            print(
-                f"Warning: File {file} is not a valid trade or price "
-                "dataframe"
-                )
-
-    # Exit early if the same number of trade and price rows haven't been read
-    if len(trade_dataframes) != len(price_dataframes):
-        print(
-            f"Error: Processed {len(trade_dataframes)} trade dataframes but "
-            f"only {len(price_dataframes)} price dataframes"
-            )
-        return None
-
-    if len(trade_dataframes) == 0:
-        print("Error: No valid trade or price dataframes to process")
-        return None
-
-    trade_dataframes = dict(sorted(trade_dataframes.items()))
-    price_dataframes = dict(sorted(price_dataframes.items()))
-
-    # Timesteps are ~1 million per day, so concatenate dataframes for each day
-    # and then concatenate all days.
-    # Add 1 million for each day to the timestamp to ensure unique timestamps
-    # across days.
-    # Since trades and prices should have the same days, we can also check that
-    # the same days are present in both dictionaries.
-    trade_master_list = []
-    price_master_list = []
-    for i, day in enumerate(trade_dataframes.keys()):
-        if day not in price_dataframes:
-            print(f"Error: Day {day} is present in trade dataframes but not "
-                  "price dataframes")
-            return None
-
-        trade_dataframes[day]["timestamp"] += i * 1_000_000
-        trade_master_list.append(trade_dataframes[day])
-        price_dataframes[day]["timestamp"] += i * 1_000_000
-        price_master_list.append(price_dataframes[day])
-
-    trade_master = pd.concat(trade_master_list, ignore_index=True)
-    price_master = pd.concat(price_master_list, ignore_index=True)
-
-    # Aggregate data by timestep and symbol as an outer join to ensure all
-    # timesteps are included, even if they only appear in one of the
-    # dataframes.
-    price_master.rename(columns={"product": "symbol"}, inplace=True)
-    master = pd.merge(
-            trade_master,
-            price_master,
-            on=["timestamp", "symbol"],
-            how="outer"
-            )
-    final_timestep = int(master["timestamp"].max())  # type: ignore
-
-    # Timesteps have a difference of about 2k between them
-    # This means in the final dataframe, aggregate data in steps of 2k
-    final_dataframe_components = []
-    for i in range(0, final_timestep + 1, 2000):
-        timestamped = master[
-                (master["timestamp"] >= i) & (master["timestamp"] < i + 2000)
-                ]
-        # Compute metrics for every symbol in the current timestep
-        for symbol in set(timestamped["symbol"]):
-            # A mid_price of 0 means no trades occurred
-            curr = timestamped[
-                    (timestamped["symbol"] == symbol) &
-                    (timestamped["mid_price"] > 0)
-                    ]
-            if curr.empty:  # type: ignore
-                continue
-
-            midprice_open = curr.iloc[0]["mid_price"]  # type: ignore
-            midprice_close = curr.iloc[-1]["mid_price"]  # type: ignore
-            midprice_low = curr["mid_price"].min()
-            midprice_high = curr["mid_price"].max()
-            avg_trade_size = curr.loc[curr["quantity"] > 0, "quantity"].mean()  # type: ignore
-            final_dataframe_components.append(
-                    pd.DataFrame({
-                        "timestamp_start": i,
-                        "timestamp_end": i + 1999,  # Inclusive end timestamp
-                        "symbol": symbol,
-                        "midprice_open": midprice_open,
-                        "midprice_close": midprice_close,
-                        "midprice_low": midprice_low,
-                        "midprice_high": midprice_high,
-                        "midprice_return": midprice_close / midprice_open - 1,
-                        "midprice_range": midprice_high - midprice_low,
-                        "total_volume": curr["quantity"].sum(),
-                        "num_trades": len(curr.loc[curr["quantity"] > 0, "quantity"]),  # type: ignore
-                        "avg_trade_size": avg_trade_size if pd.notna(avg_trade_size) else 0  # type: ignore
-                    }, index=["timestamp_start"]),
-                )
-
-    final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
-    return final_dataframe.set_index("timestamp_start")
-
-
 def classify_bots(data: pd.DataFrame) -> None:
     """Classify trading bots based on their behavior and characteristics.
 
@@ -333,7 +172,7 @@ def classify_bots(data: pd.DataFrame) -> None:
     pca_features = pca.fit_transform(scaler.fit_transform(features))
 
     # Perform k means clustering and plot the results
-    fig, axes, control_axes = _make_plot()
+    fig, axes, control_axes = make_plot("Trading Bot Classification")
     kmeans, scatter, colormap = _plot_data(axes, pca_features, 10, seed=0)
 
     # Create cursor for hover annotations
