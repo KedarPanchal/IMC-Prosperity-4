@@ -59,6 +59,8 @@ def main():
         if data is None:
             parser.error("No valid data for classification")
         classify_bots(data)
+    elif args.mode == "outlier":
+        pass  # Placeholder for outlier detection logic
     else:
         parser.error(f"Unknown mode: {args.mode}")
 
