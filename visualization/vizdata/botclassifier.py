@@ -32,7 +32,7 @@ def _make_plot():
         figure=fig,
         left=0.05,
         right=0.95,
-        top=0.9,
+        top=0.95,
         bottom=0.1,
         wspace=0.25,
         hspace=0.5,
@@ -113,13 +113,13 @@ def _kmeans_gui(fig: Figure, data: np.ndarray, control_axes: Axes, data_axes: Ax
         The TextBox widgets for k and random seed since matplotlib requires
         keeping references to them to prevent garbage collection.
     """
-    k_axes = control_axes.inset_axes((0.6, 0.8, 0.42, 0.04))
+    k_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
     k_label = widgets.TextBox(
         k_axes,
         label="Number of Clusters (k): ",
         initial="10"
         )
-    seed_axes = control_axes.inset_axes((0.4, 0.75, 0.62, 0.04))
+    seed_axes = control_axes.inset_axes((0.4, 0.9, 0.62, 0.04))
     seed_label = widgets.TextBox(
         seed_axes,
         label="Random Seed: ",
@@ -159,21 +159,23 @@ def _pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
             )
     pca1_text = control_axes.text(
         0.05,
-        0.65,
+        0.85,
         "PCA Component 1 Composition:\n\n" +
         '\n'.join(f"{col}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
         transform=control_axes.transAxes,
-        verticalalignment='top'
+        verticalalignment='top',
+        size=8
         )
     pca2_text = control_axes.text(
         0.05,
-        0.25,
+        0.40,
         "PCA Component 2 Composition:\n\n" +
         '\n'.join(f"{col}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
         transform=control_axes.transAxes,
-        verticalalignment='top'
+        verticalalignment='top',
+        size=8
         )
     return pca1_text, pca2_text
 
@@ -198,6 +200,10 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     day_regex = re.compile(r"(?<=day_)-?\d+")
 
     for file in files:
+        if not file.endswith(".csv"):
+            print(f"Warning: File {file} is not a CSV file, skipping")
+            continue
+
         df = pd.read_csv(file, sep=';')
         match = day_regex.search(file)
         if not match:
