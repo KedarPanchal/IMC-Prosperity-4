@@ -15,7 +15,7 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
-from mlutils import make_plot, pca_contributions
+from .mlutils import make_plot, pca_contributions
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
