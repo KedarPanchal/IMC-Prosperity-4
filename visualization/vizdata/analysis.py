@@ -2,31 +2,53 @@
 denoising.
 """
 
-from typing import Callable, Any
+from typing import Any
 from collections import defaultdict
 
 import re
 
 import pandas as pd
+import numpy as np
 
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import matplotlib.widgets as widgets
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import mplcursors
 
-from vizdata.denoise import DENOISING_STRATEGIES, THRESHOLDING_STRATEGIES, not_identity
+from vizdata.denoise import DENOISING_STRATEGIES
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
+
+def _collate(data: dict[Any, pd.DataFrame]):
+    """Collate a dictionary of DataFrames into a single DataFrame sorted by
+    timestamp.
+
+    This function processes data across multiple days and alters timestamps
+    such that later days have higher timestamp values.
+    """
+    if len(data) == 0:
+        return pd.DataFrame()
+
+    # Each day has 1 million timestamps
+    for i, day in enumerate(sorted(set(data.keys()))):
+        data[day]["timestamp"] += i * 1_000_000
+
+    return pd.concat(data.values(), ignore_index=True).sort_values("timestamp")
+
 
 def _formatter(value: Any, discard: Any):
     """Format a numeric value as an integer string for axis ticks."""
     return f"{int(value)}"
 
 
-def _make_plots(title: str, rows: int, cols: int, denoised: bool):
+def _make_plots(title: str, rows: int, cols: int):
     """Create a subplot grid and a full-width bottom axis for combined series.
 
-    The last row of the grid is removed and replaced by ``axes_master``, which
-    spans the figure width for overlaying all items.
+    The last row of the grid is a master axis with a shared x-axis and spans
+    the figure width for overlaying all items.
 
     Args:
         title: Figure suptitle and window title.
@@ -39,21 +61,47 @@ def _make_plots(title: str, rows: int, cols: int, denoised: bool):
         (without the bottom row) and ``axes_master`` is the bottom summary
         axis in lieu of the original bottom row.
     """
-    fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
+    fig = plt.figure(figsize=(16, 8))
+    gs = gridspec.GridSpec(
+        nrows=rows + 1,
+        ncols=cols + 1,
+        figure=fig,
+        left=0.05,
+        right=0.95,
+        top=0.9,
+        bottom=0.1,
+        wspace=0.25,
+        hspace=0.5,
+        width_ratios=[1.2] + [2] * cols,
+        )
     try:
         fig.canvas.manager.set_window_title(title)  # type: ignore
     except AttributeError:
         print("Warning: Unable to set window title; feature may be unsupported in this environment.")
+
     fig.suptitle(title)
 
-    for ax in axes[-1]:
-        ax.remove()
-    axes_master = fig.add_subplot(rows, 1, rows)
-    axes_master.set_title(f"All Items{' (denoised)' if denoised else ''}")
+    control_axes = fig.add_subplot(gs[:, 0])
+    control_axes.set_xticks([])
+    control_axes.set_yticks([])
+    control_axes.set_frame_on(False)
+
+    axes = []
+    for r in range(rows):
+        row_axes = []
+        for c in range(cols):
+            ax = fig.add_subplot(gs[r, c + 1])
+            ax.xaxis.set_major_formatter(_formatter)
+            ax.yaxis.set_major_formatter(_formatter)
+            row_axes.append(ax)
+        axes.append(row_axes)
+
+    axes_master = fig.add_subplot(gs[rows, 1:])
+    axes_master.set_title("All Items")
     axes_master.xaxis.set_major_formatter(_formatter)
     axes_master.yaxis.set_major_formatter(_formatter)
 
-    return fig, axes, axes_master
+    return fig, np.array(axes), axes_master, control_axes
 
 
 def _plot_data(
@@ -107,13 +155,69 @@ def _plot_data(
         axis.legend()
 
 
-# -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
+def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_list: list[list]):
+    """Renders a simple GUI with controls for denoising the plotted data using
+    different strategies.
 
-# MAJOR TODO: Refactor the analysis functions to directly operate on DataFrames
+    Args:
+        fig: The matplotlib figure to which the GUI will be attached.
+        axes: The axes on which to place the GUI controls.
+        artists_list: A list of lists of matplotlib line artists corresponding
+        to the plotted data series.
+        raw_data_list: A list of lists of raw data corresponding to each artist
+        list, used for applying the denoising transformations.
+
+    Returns:
+        The created GUI controls (buttons and text boxes) since matplotlib
+        requires keeping references to them to prevent garbage collection.
+    """
+    button_axes = axes.inset_axes((0.05, 0.4, 0.9, 0.15))
+    button = widgets.RadioButtons(
+            button_axes,
+            labels=list(DENOISING_STRATEGIES.keys()),
+            active=list(DENOISING_STRATEGIES.keys()).index("identity")
+            )
+    passes_axes = axes.inset_axes((0.25, 0.35, 0.7, 0.04))
+    passes = widgets.TextBox(
+            passes_axes,
+            label="Passes: ",
+            initial="6",
+            )
+    alpha_axes = axes.inset_axes((0.52, 0.3, 0.43, 0.04))
+    alpha = widgets.TextBox(
+            alpha_axes,
+            label="Alpha (EMA only): ",
+            initial="0.5",
+            )
+
+    def change_denoise(label):
+        try:
+            passes_value = int(passes.text)
+            alpha_value = float(alpha.text)
+        except ValueError:
+            print("Invalid input for denoising passes and/or alpha; using default of 6 passes and 0.5 alpha")
+            passes_value = 6
+            alpha_value = 0.5
+        try:
+            denoiser = DENOISING_STRATEGIES[label](passes_value, alpha_value)
+            for artists, raw_data in zip(artists_list, raw_data_list):
+                for artist, data in zip(artists, raw_data):
+                    artist.set_ydata(denoiser(data))
+            fig.canvas.draw_idle()
+        except ValueError:
+            print(f"Alpha out of range (0, 1) for EMA denoising; got {alpha_value}. Please enter a valid alpha value.")
+
+    button.on_clicked(change_denoise)
+    passes.on_submit(change_denoise)
+    alpha.on_submit(change_denoise)
+
+    return button, passes, alpha
+
+
+# -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
 
 def _analyze_trade_data(
         data: pd.DataFrame,
-        denoiser: Callable[[list[int | float]], list[int | float]]
         ):
     """Plot per-symbol trade price and quantity, plus a combined price view.
 
@@ -122,8 +226,6 @@ def _analyze_trade_data(
 
     Args:
         data: Trade history table.
-        filename: Label used in the figure title (typically the source file
-        name).
 
     Returns:
         None. Prints a message and returns early if there are no rows.
@@ -133,22 +235,20 @@ def _analyze_trade_data(
         print("No trade data found for analysis")
         return
 
-    # Check if denoising is actually being done
-    denoised = not_identity(denoiser)
-
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
-    _, axes, ax_master = _make_plots(
+    fig, axes, ax_master, control_axes = _make_plots(
             "Trade Data Analysis",
-            3,
+            2,
             len(set(data["symbol"])),
-            denoised
             )
 
     # Create arrays to store each artist for rendering the cursors
     price_artists = []
+    price_artists_data_raw = []
     quantity_artists = []
+    quantity_artists_data_raw = []
     master_artists = []
 
     # render each individual trade item in a subplot
@@ -160,28 +260,28 @@ def _analyze_trade_data(
         timestamps = data.loc[mask, "timestamp"].to_list()
 
         # plot the trade data
-        prices = denoiser(data.loc[mask, "price"].to_list())
+        price_artists_data_raw.append(data.loc[mask, "price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
-            title=f"price{' (denoised)' if denoised else ''}",
+            title="price",
             title_color="green",
             timestamps=timestamps,
-            data=prices,
+            data=price_artists_data_raw[-1],
             data_label="price",
             data_color="green",
             artists=price_artists
             )
 
         # plot the quantity data
-        quantities = denoiser(data.loc[mask, "quantity"].to_list())
+        quantity_artists_data_raw.append(data.loc[mask, "quantity"].to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title=f"quantity{' (denoised)' if denoised else ''}",
+            title="quantity",
             title_color="blue",
             timestamps=timestamps,
-            data=quantities,
+            data=quantity_artists_data_raw[-1],
             data_label="quantity",
             data_color="blue",
             artists=quantity_artists
@@ -191,7 +291,7 @@ def _analyze_trade_data(
         master_artists.extend(
                 ax_master.plot(
                     timestamps,
-                    prices,
+                    price_artists_data_raw[-1],
                     label=symbol,
                     picker=8
                 )
@@ -207,7 +307,7 @@ def _analyze_trade_data(
     def on_add_price(sel):
         """Annotate hover selection on a price subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nPrice{' (denoised)' if denoised else ''}: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nPrice: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
@@ -221,7 +321,7 @@ def _analyze_trade_data(
     def on_add_quantity(sel):
         """Annotate hover selection on a quantity subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nQuantity{' (denoised)' if denoised else ''}: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nQuantity: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -235,21 +335,23 @@ def _analyze_trade_data(
     def on_add_master(sel):
         """Annotate hover selection on the combined master axis."""
         x, y = sel.target
-        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice{' (denoised)' if denoised else ''}: {y}")
+        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
+    _ = _denoise_gui(
+        fig,
+        control_axes,
+        artists_list=[price_artists, quantity_artists, master_artists],
+        raw_data_list=[price_artists_data_raw, quantity_artists_data_raw, price_artists_data_raw]
+        )
     # actually plot everything
     ax_master.legend()
     plt.tight_layout()
     plt.show()
 
 
-def _analyze_price_data(
-        data: pd.DataFrame,
-        alpha: float,
-        denoiser: Callable[[list[int | float]], list[int | float]]
-        ):
+def _analyze_price_data(data: pd.DataFrame):
     """Plot per-product bid/ask/fair price and volumes, plus combined price
     series.
 
@@ -270,25 +372,26 @@ def _analyze_price_data(
         print("No price data found for analysis")
         return
 
-    # Check if denoising is actually being done
-    denoised = not_identity(denoiser)
-
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
-    _, axes, ax_master = _make_plots(
+    fig, axes, ax_master, control_axes = _make_plots(
             "Price Data Analysis",
-            4,
+            2,
             len(set(data["product"])),
-            denoised
             )
 
     # Create arrays to store each artist for rendering the cursors
     bid_price_artists = []
+    bid_price_artists_data_raw = []
     ask_price_artists = []
-    mid_artists = []
+    ask_price_artists_data_raw = []
+    mid_price_artists = []
+    mid_price_artists_data_raw = []
     bid_quantity_artists = []
+    bid_quantity_artists_data_raw = []
     ask_quantity_artists = []
+    ask_quantity_artists_data_raw = []
     bid_master_artists = []
     ask_master_artists = []
     mid_master_artists = []
@@ -321,23 +424,23 @@ def _analyze_price_data(
         mask = symbol == data["product"]
         # Set shared axis data
         axes[0, plot].set_title(symbol)  # type: ignore
-        axes[2, plot].set_xlabel("Timestamp")  # type: ignore
+        axes[1, plot].set_xlabel("Timestamp")  # type: ignore
 
         bid_timestamps = data.loc[mask & nonzero_bids, "timestamp"].to_list()
         ask_timestamps = data.loc[mask & nonzero_asks, "timestamp"].to_list()
         mid_timestamps = data.loc[mask & nonzero_mid, "timestamp"].to_list()
 
         # Plot the bid/ask/fair value price data
-        bid_prices = denoiser(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
-        ask_prices = denoiser(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
-        mid_prices = denoiser(data.loc[mask & nonzero_mid, "mid_price"].to_list())
+        bid_price_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
+        ask_price_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
+        mid_price_artists_data_raw.append(data.loc[mask & nonzero_mid, "mid_price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
-            title=f"Bid/Ask Prices{' (denoised)' if denoised else ''}",
+            title="Bid/Ask Prices",
             title_color="green",
             timestamps=bid_timestamps,
-            data=bid_prices,
+            data=bid_price_artists_data_raw[-1],
             data_label="bid",
             data_color="green",
             artists=bid_price_artists,
@@ -346,7 +449,7 @@ def _analyze_price_data(
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             timestamps=ask_timestamps,
-            data=ask_prices,
+            data=ask_price_artists_data_raw[-1],
             data_label="ask",
             data_color="red",
             artists=ask_price_artists,
@@ -355,58 +458,43 @@ def _analyze_price_data(
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             timestamps=mid_timestamps,
-            data=mid_prices,
+            data=mid_price_artists_data_raw[-1],
             data_label="fair value",
             data_color="blue",
-            artists=mid_artists,
+            artists=mid_price_artists,
             show_legend=True
             )
 
-        # Plot EMA only if the denoising strategy is identity
-        if not denoised:
-            ema_prices = data.loc[mask & nonzero_mid, "mid_price"].ewm(alpha=alpha).mean().to_list()
-            _plot_data(
-                axis=axes[0, plot],  # type: ignore
-                timestamps=mid_timestamps,
-                data=ema_prices,
-                data_label=f"EMA (alpha={alpha})",
-                data_color="yellow",
-                show_legend=True
-                )
-
-        # Plot the bid quantity data
-        bid_volumes = denoiser(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
+        # Plot the bid/ask quantity data
+        bid_quantity_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
+        ask_quantity_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title=f"Bid Volume{' (denoised)' if denoised else ''}",
+            title="Bid/Ask Volume",
             title_color="blue",
             timestamps=bid_timestamps,
-            data=bid_volumes,
+            data=bid_quantity_artists_data_raw[-1],
             data_label="bid",
             data_color="blue",
-            artists=bid_quantity_artists
+            artists=bid_quantity_artists,
+            show_legend=True
             )
-
-        # Plot the ask quantity data
-        ask_volumes = denoiser(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
         _plot_data(
-            axis=axes[2, plot],  # type: ignore
-            axis_color="orange",
-            title=f"Ask Volume{' (denoised)' if denoised else ''}",
-            title_color="orange",
+            axis=axes[1, plot],  # type: ignore
             timestamps=ask_timestamps,
-            data=ask_volumes,
+            data=ask_quantity_artists_data_raw[-1],
             data_label="ask",
             data_color="orange",
-            artists=ask_quantity_artists
+            artists=ask_quantity_artists,
+            show_legend=True
             )
 
         # Plot the bid/ask/fair value price on the master plot
         bid_master_artists.extend(
                 ax_master.plot(
                     bid_timestamps,
-                    bid_prices,
+                    bid_price_artists_data_raw[-1],
                     linewidth=0.8,
                     label=f"{symbol} bid",
                     picker=8
@@ -415,7 +503,7 @@ def _analyze_price_data(
         ask_master_artists.extend(
                 ax_master.plot(
                     ask_timestamps,
-                    ask_prices,
+                    ask_price_artists_data_raw[-1],
                     linewidth=0.8,
                     label=f"{symbol} ask",
                     picker=8
@@ -424,7 +512,7 @@ def _analyze_price_data(
         mid_master_artists.extend(
                 ax_master.plot(
                     mid_timestamps,
-                    mid_prices,
+                    mid_price_artists_data_raw[-1],
                     linewidth=0.8,
                     label=f"{symbol} fair value",
                     color="blue",
@@ -434,7 +522,7 @@ def _analyze_price_data(
 
     # Create cursor for the price plot
     price_cursor = mplcursors.cursor(
-            [*bid_price_artists, *ask_price_artists, *mid_artists],
+            [*bid_price_artists, *ask_price_artists, *mid_price_artists],
             hover=mplcursors.HoverMode.Transient
             )
 
@@ -444,15 +532,15 @@ def _analyze_price_data(
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif label == "ask":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -468,11 +556,11 @@ def _analyze_price_data(
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume{' (denoised)' if denoised else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume{' (denoised)' if denoised else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -492,17 +580,63 @@ def _analyze_price_data(
         x, y = sel.target
         symbol, trade_type = sel.artist.get_label().split(' ', 1)
         if trade_type == "bid":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif trade_type == "ask":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
+
+    # Render control panel
+    _ = _denoise_gui(
+        fig,
+        control_axes,
+        artists_list=[
+            bid_price_artists,
+            ask_price_artists,
+            mid_price_artists,
+            bid_quantity_artists,
+            ask_quantity_artists,
+            bid_master_artists,
+            ask_master_artists,
+            mid_master_artists
+        ],
+        raw_data_list=[
+            bid_price_artists_data_raw,
+            ask_price_artists_data_raw,
+            mid_price_artists_data_raw,
+            bid_quantity_artists_data_raw,
+            ask_quantity_artists_data_raw,
+            bid_price_artists_data_raw,
+            ask_price_artists_data_raw,
+            mid_price_artists_data_raw,
+        ]
+        )
+    bid_ask_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
+    bid_ask_mapping = {
+        "Show bid price": bid_price_artists + bid_master_artists,
+        "Show ask price": ask_price_artists + ask_master_artists,
+        "Show fair value price": mid_price_artists + mid_master_artists,
+        "Show bid volume": bid_quantity_artists,
+        "Show ask volume": ask_quantity_artists,
+    }
+    bid_ask_checkbox = widgets.CheckButtons(
+        bid_ask_checkbox_axes,
+        labels=list(bid_ask_mapping.keys()),
+        actives=[True] * len(bid_ask_mapping.keys())
+        )
+
+    def toggle_bid_ask(label):
+        for artist in bid_ask_mapping[label]:
+            artist.set_visible(not artist.get_visible())
+        fig.canvas.draw_idle()
+
+    bid_ask_checkbox.on_clicked(toggle_bid_ask)
 
     # Actually plot everything
     ax_master.legend()
@@ -510,30 +644,22 @@ def _analyze_price_data(
     plt.show()
 
 
-def analyze_data(
-        file_paths: list[str],
-        strategy: str,
-        passes: int,
-        thresholding: str,
-        alpha: float
-        ):
+# -- MAIN ANALYSIS FUNCTION ---------------------------------------------------
+
+def analyze_data(file_paths: list[str]):
     """Load a semicolon-separated CSV and dispatch to trade or price
     visualization.
 
     Chooses ``analyze_trade_data`` if a ``buyer`` column exists,
     ``analyze_price_data`` if ``profit_and_loss`` exists; otherwise prints a
     notice.
-    Applies the appropriate denoising strategy if specified.
 
     Args:
-        file_path: Path to the CSV file.
-        strategy: The name of the denoising strategy to utilize
-        passes: The number of denoising passes to make
+        file_paths: Path to the CSV file.
 
     Returns:
         None.
     """
-
     trade_paths = defaultdict(pd.DataFrame)
     price_paths = defaultdict(pd.DataFrame)
     day_regex = re.compile(r"(?<=day_)-?\d+")
@@ -552,31 +678,13 @@ def analyze_data(
         else:
             print(f"Warning: File {file_path} is not a valid trade or price data file")
 
-    # Determine the appropriate denoising function based on the strategy
-    try:
-        thresh = THRESHOLDING_STRATEGIES[thresholding]
-        denoise = DENOISING_STRATEGIES[strategy](passes, thresh, alpha)
-    except ValueError as e:
-        print(f"Error: {e}. Defaulting to no denoising and hanning thresholding.")
-        thresh = THRESHOLDING_STRATEGIES["hanning"]
-        denoise = DENOISING_STRATEGIES["identity"](passes, thresh, alpha)
-
     if len(trade_paths) > 0:
-        # Offset timestamps by day to ensure they are plotted chronologically
-        for i, day in enumerate(sorted(set(trade_paths.keys()))):
-            trade_paths[day]["timestamp"] += i * 1_000_000
-
-        trade_data = pd.concat(trade_paths.values(), ignore_index=True).sort_values("timestamp")
-        _analyze_trade_data(trade_data, denoise)
+        trade_data = _collate(trade_paths)
+        _analyze_trade_data(trade_data)
 
     if len(price_paths) > 0:
-        # Offset timestamps by day to ensure they are plotted chronologically
-        for i, day in enumerate(sorted(set(price_paths.keys()))):
-            price_paths[day]["timestamp"] += i * 1_000_000
-
-        price_data = pd.concat(price_paths.values(), ignore_index=True).sort_values("timestamp")
-
-        _analyze_price_data(price_data, alpha, denoise)
+        price_data = _collate(price_paths)
+        _analyze_price_data(price_data)
 
     if len(trade_paths) == 0 and len(price_paths) == 0:
         print("No valid trade or price data found for analysis")

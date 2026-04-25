@@ -4,7 +4,6 @@ import argparse
 import os
 
 from vizdata.analysis import analyze_data
-from vizdata.denoise import DENOISING_STRATEGIES, THRESHOLDING_STRATEGIES
 from vizdata.botclassifier import collate_data, classify_bots
 
 
@@ -14,73 +13,25 @@ def main():
     """Parse CLI paths and run ``analyze_data`` on each existing file."""
 
     # Create base parser containing shared logic across commands
-    base_parser = argparse.ArgumentParser(add_help=False)
-    base_parser.add_argument(
+    parser = argparse.ArgumentParser(
+            add_help=True,
+            description="Visualize and analyze IMC Prosperity 4 data from CSV files."
+            )
+    parser.add_argument(
             "--files",
             "-f",
             dest="files",
             nargs="*",
             help="Paths to CSV files for analysis"
             )
-
-    # Create main parser and subparsers for different analysis commands
-    parser = argparse.ArgumentParser(
-        description="Visualize trade and price data from CSV files.",
-        )
-    subparser = parser.add_subparsers(dest="command", required=True)
-
-    analysis_parser = subparser.add_parser(
-            "analysis",
-            parents=[base_parser],
-            help="Perform visualization with optional data denoising"
+    parser.add_argument(
+            "--mode",
+            "-m",
+            dest="mode",
+            choices=["analysis", "classification"],
+            default="analysis",
+            help="Mode of operation: 'analysis' for visualization, 'classification' for bot classification"
             )
-    analysis_parser.add_argument(
-        "--strategy",
-        "-s",
-        dest="strategy",
-        choices=list(DENOISING_STRATEGIES.keys()),
-        default="identity",
-        help="Which denoising algorithm to utilize when denoising the data"
-        )
-    analysis_parser.add_argument(
-            "--passes",
-            "-p",
-            dest="passes",
-            type=int,
-            default=2,
-            help="The number of denoising passes to perform"
-            )
-    analysis_parser.add_argument(
-        "--thresholding",
-        "-t",
-        dest="thresholding",
-        choices=list(THRESHOLDING_STRATEGIES.keys()),
-        default="hanning",
-        help="Which thresholding algorithm to utilize when denoising the data"
-        )
-    analysis_parser.add_argument(
-            "--alpha",
-            "-a",
-            dest="alpha",
-            type=float,
-            default=0.5,
-            help="The alpha value to compute the exponential moving average for the EMA denoising strategy"
-            )
-
-    classification_parser = subparser.add_parser(
-            "classification",
-            parents=[base_parser],
-            help="Classify bots based on trading data"
-            )
-    classification_parser.add_argument(
-            "--clusters",
-            "-k",
-            dest="clusters",
-            type=int,
-            default=10,
-            help="The number of clusters to use for bot classification"
-            )
-
     args = parser.parse_args()
 
     # Parsing files must be passed
@@ -94,20 +45,14 @@ def main():
         else:
             parser.error(f"Unknown file: {file}")
 
-    if args.command == "analysis":
-        analyze_data(
-            files,
-            args.strategy,
-            args.passes,
-            args.thresholding,
-            args.alpha
-            )
-    elif args.command == "classification":
+    if args.mode == "analysis":
+        analyze_data(files)
+    elif args.mode == "classification":
         # Placeholder for classification logic
         data = collate_data(files)
         if data is None:
             parser.error("No valid data for classification")
-        classify_bots(data, args.clusters)
+        classify_bots(data)
 
 
 if __name__ == "__main__":
