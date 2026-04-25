@@ -198,12 +198,14 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
             print("Invalid input for denoising passes and/or alpha; using default of 6 passes and 0.5 alpha")
             passes_value = 6
             alpha_value = 0.5
-
-        denoiser = DENOISING_STRATEGIES[label](passes_value, alpha_value)
-        for artists, raw_data in zip(artists_list, raw_data_list):
-            for artist, data in zip(artists, raw_data):
-                artist.set_ydata(denoiser(data))
-        fig.canvas.draw_idle()
+        try:
+            denoiser = DENOISING_STRATEGIES[label](passes_value, alpha_value)
+            for artists, raw_data in zip(artists_list, raw_data_list):
+                for artist, data in zip(artists, raw_data):
+                    artist.set_ydata(denoiser(data))
+            fig.canvas.draw_idle()
+        except ValueError:
+            print(f"Alpha out of range (0, 1) for EMA denoising; got {alpha_value}. Please enter a valid alpha value.")
 
     button.on_clicked(change_denoise)
     passes.on_submit(change_denoise)
