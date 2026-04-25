@@ -213,8 +213,6 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
 
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
 
-# MAJOR TODO: Refactor the analysis functions to directly operate on DataFrames
-
 def _analyze_trade_data(
         data: pd.DataFrame,
         ):
