@@ -10,8 +10,8 @@ import re
 import pandas as pd
 
 import matplotlib.pyplot as plt
+import matplotlib.widgets as widgets
 import mplcursors
-import PySimpleGUI as sg
 
 from vizdata.denoise import DENOISING_STRATEGIES, not_identity
 
@@ -40,7 +40,7 @@ def _formatter(value: Any, discard: Any):
     return f"{int(value)}"
 
 
-def _make_plots(title: str, rows: int, cols: int, denoised: bool):
+def _make_plots(title: str, rows: int, cols: int):
     """Create a subplot grid and a full-width bottom axis for combined series.
 
     The last row of the grid is removed and replaced by ``axes_master``, which
@@ -67,7 +67,7 @@ def _make_plots(title: str, rows: int, cols: int, denoised: bool):
     for ax in axes[-1]:
         ax.remove()
     axes_master = fig.add_subplot(rows, 1, rows)
-    axes_master.set_title(f"All Items{' (denoised)' if denoised else ''}")
+    axes_master.set_title("All Items")
     axes_master.xaxis.set_major_formatter(_formatter)
     axes_master.yaxis.set_major_formatter(_formatter)
 
@@ -125,13 +125,30 @@ def _plot_data(
         axis.legend()
 
 
+def _denoise_gui(fig, artists_list: list[list], raw_data_list: list[list]):
+    button = widgets.RadioButtons(
+            plt.axes((0.01, 0.4, 0.1, 0.15)),
+            labels=list(DENOISING_STRATEGIES.keys()),
+            active=list(DENOISING_STRATEGIES.keys()).index("identity")
+            )
+
+    def change_denoise(label):
+        denoiser = DENOISING_STRATEGIES[label](6, 0.7)
+        for artists, raw_data in zip(artists_list, raw_data_list):
+            for artist, data in zip(artists, raw_data):
+                artist.set_ydata(denoiser(data))
+        fig.canvas.draw_idle()
+
+    button.on_clicked(change_denoise)
+    return button
+
+
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
 
 # MAJOR TODO: Refactor the analysis functions to directly operate on DataFrames
 
 def _analyze_trade_data(
         data: pd.DataFrame,
-        denoiser: Callable[[list[int | float]], list[int | float]]
         ):
     """Plot per-symbol trade price and quantity, plus a combined price view.
 
@@ -140,8 +157,6 @@ def _analyze_trade_data(
 
     Args:
         data: Trade history table.
-        filename: Label used in the figure title (typically the source file
-        name).
 
     Returns:
         None. Prints a message and returns early if there are no rows.
@@ -151,22 +166,20 @@ def _analyze_trade_data(
         print("No trade data found for analysis")
         return
 
-    # Check if denoising is actually being done
-    denoised = not_identity(denoiser)
-
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
-    _, axes, ax_master = _make_plots(
+    fig, axes, ax_master = _make_plots(
             "Trade Data Analysis",
             3,
             len(set(data["symbol"])),
-            denoised
             )
 
     # Create arrays to store each artist for rendering the cursors
     price_artists = []
+    price_artists_data_raw = []
     quantity_artists = []
+    quantity_artists_data_raw = []
     master_artists = []
 
     # render each individual trade item in a subplot
@@ -178,28 +191,28 @@ def _analyze_trade_data(
         timestamps = data.loc[mask, "timestamp"].to_list()
 
         # plot the trade data
-        prices = denoiser(data.loc[mask, "price"].to_list())
+        price_artists_data_raw.append(data.loc[mask, "price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
-            title=f"price{' (denoised)' if denoised else ''}",
+            title="price",
             title_color="green",
             timestamps=timestamps,
-            data=prices,
+            data=price_artists_data_raw[-1],
             data_label="price",
             data_color="green",
             artists=price_artists
             )
 
         # plot the quantity data
-        quantities = denoiser(data.loc[mask, "quantity"].to_list())
+        quantity_artists_data_raw.append(data.loc[mask, "quantity"].to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title=f"quantity{' (denoised)' if denoised else ''}",
+            title="quantity",
             title_color="blue",
             timestamps=timestamps,
-            data=quantities,
+            data=quantity_artists_data_raw[-1],
             data_label="quantity",
             data_color="blue",
             artists=quantity_artists
@@ -209,7 +222,7 @@ def _analyze_trade_data(
         master_artists.extend(
                 ax_master.plot(
                     timestamps,
-                    prices,
+                    price_artists_data_raw[-1],
                     label=symbol,
                     picker=8
                 )
@@ -225,7 +238,7 @@ def _analyze_trade_data(
     def on_add_price(sel):
         """Annotate hover selection on a price subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nPrice{' (denoised)' if denoised else ''}: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nPrice: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
@@ -239,7 +252,7 @@ def _analyze_trade_data(
     def on_add_quantity(sel):
         """Annotate hover selection on a quantity subplot."""
         x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nQuantity{' (denoised)' if denoised else ''}: {y}")
+        sel.annotation.set_text(f"Timestamp: {x}\nQuantity: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -253,10 +266,15 @@ def _analyze_trade_data(
     def on_add_master(sel):
         """Annotate hover selection on the combined master axis."""
         x, y = sel.target
-        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice{' (denoised)' if denoised else ''}: {y}")
+        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice: {y}")
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
+    _ = _denoise_gui(
+        fig,
+        artists_list=[price_artists, quantity_artists, master_artists],
+        raw_data_list=[price_artists_data_raw, quantity_artists_data_raw, price_artists_data_raw]
+        )
     # actually plot everything
     ax_master.legend()
     plt.tight_layout()
@@ -298,7 +316,6 @@ def _analyze_price_data(
             "Price Data Analysis",
             4,
             len(set(data["product"])),
-            denoised
             )
 
     # Create arrays to store each artist for rendering the cursors
@@ -579,7 +596,7 @@ def analyze_data(
 
     if len(trade_paths) > 0:
         trade_data = _collate(trade_paths)
-        _analyze_trade_data(trade_data, denoise)
+        _analyze_trade_data(trade_data)
 
     if len(price_paths) > 0:
         price_data = _collate(price_paths)
