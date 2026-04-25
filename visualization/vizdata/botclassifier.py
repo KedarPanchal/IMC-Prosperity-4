@@ -48,7 +48,6 @@ def _plot_data(data_axes: Axes, data: np.ndarray, k: int, seed: int):
             )
     data_axes.set_xlabel("PCA Component 1")
     data_axes.set_ylabel("PCA Component 2")
-    data_axes.set_title(f"K-Means Clustering of Trading Bots (k={k}, seed={seed})")
     if len(kmeans.cluster_centers_) >= 2:
         voronoi = Voronoi(kmeans.cluster_centers_)
         voronoi_plot_2d(

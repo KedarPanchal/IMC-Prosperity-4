@@ -101,6 +101,9 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     day_regex = re.compile(r"(?<=day_)-?\d+")
 
     for file in files:
+        if not file.endswith(".csv"):
+            print(f"Warning: Skipping non-CSV file {file}")
+            continue
         df = pd.read_csv(file, sep=';')
         match = day_regex.search(file)
         if not match:

@@ -199,7 +199,7 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
             passes_value = 6
             alpha_value = 0.5
         try:
-            denoiser = DENOISING_STRATEGIES[label](passes_value, alpha_value)
+            denoiser = DENOISING_STRATEGIES[button.value_selected](passes_value, alpha_value)
             for artists, raw_data in zip(artists_list, raw_data_list):
                 for artist, data in zip(artists, raw_data):
                     artist.set_ydata(denoiser(data))
