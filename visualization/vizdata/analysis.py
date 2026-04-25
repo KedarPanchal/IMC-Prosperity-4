@@ -299,6 +299,7 @@ def _plot_selection_gui(
                         ask_master_artists=kwargs["ask_master_artists"],
                         mid_master_artists=kwargs["mid_master_artists"]
                         )
+            ax_master.legend()
             fig.canvas.draw_idle()
 
     plot_selection_checkbox.on_clicked(toggle_plot)
