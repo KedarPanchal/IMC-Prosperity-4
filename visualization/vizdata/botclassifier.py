@@ -14,7 +14,7 @@ from scipy.spatial import Voronoi, voronoi_plot_2d
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
-from .mlutils import make_plot, pca_contributions, preprocess_data
+from .mlutils import make_plot, pca_contributions, preprocess_data, COL_NAMES
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
@@ -144,18 +144,6 @@ def classify_bots(data: pd.DataFrame) -> None:
     kmeans, scatter, colormap = _plot_data(axes, pca_features, 10, seed=0)
 
     # Create cursor for hover annotations
-    COL_NAMES = {
-        "symbol": "Symbol",
-        "midprice_open": "Mid Price Open",
-        "midprice_close": "Mid Price Close",
-        "midprice_low": "Mid Price Low",
-        "midprice_high": "Mid Price High",
-        "midprice_return": "Mid Price Return",
-        "midprice_range": "Mid Price Range",
-        "total_volume": "Total Volume",
-        "num_trades": "Number of Trades",
-        "avg_trade_size": "Average Trade Size",
-    }
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
 
     @cursor.connect("add")

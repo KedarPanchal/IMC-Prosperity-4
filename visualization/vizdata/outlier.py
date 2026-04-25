@@ -11,20 +11,32 @@ from matplotlib.axes import Axes
 import mplcursors
 
 from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
-from .mlutils import make_plot, pca_contributions, preprocess_data
+from .mlutils import make_plot, pca_contributions, preprocess_data, COL_NAMES
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
 
-def _plot_data(
+def _plot_isolation_data(
         isolation_axes: Axes,
         data: np.ndarray,
         tree_count: int,
         seed: int
         ):
+    """Plot the data points in a 2D PCA space, colored by their isolation 
+    forest labels.
+
+    Args:
+        isolation_axes: The axes to plot the data on.
+        data: The preprocessed data to plot.
+        tree_count: The number of trees to use for the isolation forest.
+        seed: The random seed to use for the isolation forest.
+
+    Returns:
+        The fitted IsolationForest model, the scatter plot object, the colormap
+        used for plotting, and the fitted PCA model.
+    """
     # Perform isolation forest outlier detection
     isolation = IsolationForest(
         n_estimators=tree_count,
@@ -39,7 +51,7 @@ def _plot_data(
 
     # Plot the data points
     colormap = plt.get_cmap("coolwarm", 2)
-    scatter = isolation_axes.scatter(
+    isolation_scatter = isolation_axes.scatter(
             pca_features[:, 0],
             pca_features[:, 1],
             c=labels,
@@ -51,7 +63,39 @@ def _plot_data(
             )
     isolation_axes.set_xlabel("PCA Component 1")
     isolation_axes.set_ylabel("PCA Component 2")
-    return isolation, scatter, colormap, pca
+
+    return isolation, isolation_scatter, colormap, pca
+
+
+def _plot_decision_data(
+        isolation: IsolationForest,
+        decision_axes: Axes,
+        data: np.ndarray
+        ):
+    """Plot the isolation forest decision scores for each data point, sorted
+    by score.
+
+    Args:
+        isolation: The fitted IsolationForest model.
+        decision_axes: The axes to plot the decision scores on.
+        data: The preprocessed data to compute the decision scores for.
+
+    Returns:
+        The decision scores for each data point and the line plot object.
+    """
+    decision_scores = isolation.decision_function(data)
+    decision_axes.clear()
+    decision_graph = decision_axes.plot(
+        range(len(decision_scores)),
+        sorted(decision_scores),
+        color="black",
+        alpha=0.6,
+        picker=8
+        )
+    decision_axes.set_xlabel("Data Point Index (sorted by score)")
+    decision_axes.set_ylabel("Isolation Forest Decision Score")
+
+    return decision_scores, decision_graph
 
 
 def _outliers_gui(
@@ -68,14 +112,50 @@ def detect_outliers(data: pd.DataFrame):
     # Preprocess the data
     dropped, features, scaled = preprocess_data(data)
     fig, (isolation_axes, split_axes), control_axes = make_plot("Outlier Detection", 2)
-    isolation, scatter, colormap, pca = _plot_data(
+    isolation, isolation_scatter, isolation_colormap, pca = _plot_isolation_data(
         isolation_axes,
         scaled,
         tree_count=100,
         seed=0
         )
+    decision_scores, decision_graph = _plot_decision_data(
+        isolation,
+        split_axes,
+        scaled
+        )
 
     # Create cursor for hover annotations
+    isolation_cursor = mplcursors.cursor(isolation_scatter, hover=mplcursors.HoverMode.Transient)
+
+    @isolation_cursor.connect("add")
+    def on_isolation_add(sel):
+        index = sel.index
+
+        local_data = data.iloc[[index]]
+        numeric_columns = local_data.select_dtypes(include=[np.number]).columns
+        local_data[numeric_columns] = local_data[numeric_columns].round(4)
+        sel.annotation.set_text(
+            f"Start Timestamp: {local_data.index[0]}\n" +
+            '\n'.join(f"{COL_NAMES.get(col, col)}: {local_data[col].iloc[0]}" for col in dropped.columns) +
+            f"\nOutlier Score: {decision_scores[index]:.4f}"  # type: ignore
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.95)
+        sel.annotation.get_bbox_patch().set_facecolor(
+            isolation_colormap(isolation.predict(scaled)[index])  # type: ignore
+            )
+
+    sorted_decision_scores = sorted(decision_scores)
+    decision_cursor = mplcursors.cursor(decision_graph, hover=mplcursors.HoverMode.Transient)
+
+    @decision_cursor.connect("add")
+    def on_decision_add(sel):
+        index = int(sel.index)
+
+        sel.annotation.set_text(
+            f"Outlier Score: {sorted_decision_scores[index]:.4f}"  # type: ignore
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.95)
+        sel.annotation.get_bbox_patch().set_facecolor("red" if sorted_decision_scores[index] < 0 else "green")  # type: ignore
 
     # Show the PCA component contributions
     pca_contributions(pca, features, control_axes)

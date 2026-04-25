@@ -243,3 +243,19 @@ def preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.
     # Normalize the features
     scaler = StandardScaler()
     return dropped, features, scaler.fit_transform(features)
+
+
+# -- GLOBAL CONSTANTS ---------------------------------------------------------
+
+COL_NAMES = {
+    "symbol": "Symbol",
+    "midprice_open": "Mid Price Open",
+    "midprice_close": "Mid Price Close",
+    "midprice_low": "Mid Price Low",
+    "midprice_high": "Mid Price High",
+    "midprice_return": "Mid Price Return",
+    "midprice_range": "Mid Price Range",
+    "total_volume": "Total Volume",
+    "num_trades": "Number of Trades",
+    "avg_trade_size": "Average Trade Size",
+}
