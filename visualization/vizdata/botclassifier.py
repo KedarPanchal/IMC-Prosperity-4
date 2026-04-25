@@ -264,7 +264,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     return final_dataframe.set_index("timestamp_start")
 
 
-def classify_bots(data: pd.DataFrame, clusters: int) -> None:
+def classify_bots(data: pd.DataFrame) -> None:
     """Classify trading bots based on their behavior and characteristics.
 
     Uses k-means clustering to group bots into distinct categories based on
@@ -291,7 +291,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
 
     # Perform k means clustering and plot the results
     fig, axes, control_axes = _make_plot()
-    kmeans, scatter, colormap = _plot_data(axes, pca_features, clusters, seed=0)
+    kmeans, scatter, colormap = _plot_data(axes, pca_features, 10, seed=0)
 
     # Create cursor for hover annotations
     COL_NAMES = {

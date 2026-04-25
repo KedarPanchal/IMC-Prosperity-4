@@ -13,41 +13,22 @@ def main():
     """Parse CLI paths and run ``analyze_data`` on each existing file."""
 
     # Create base parser containing shared logic across commands
-    base_parser = argparse.ArgumentParser(add_help=False)
-    base_parser.add_argument(
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
             "--files",
             "-f",
             dest="files",
             nargs="*",
             help="Paths to CSV files for analysis"
             )
-
-    # Create main parser and subparsers for different analysis commands
-    parser = argparse.ArgumentParser(
-        description="Visualize trade and price data from CSV files.",
-        )
-    subparser = parser.add_subparsers(dest="command", required=True)
-
-    analysis_parser = subparser.add_parser(
-            "analysis",
-            parents=[base_parser],
-            help="Perform visualization with optional data denoising"
+    parser.add_argument(
+            "--mode",
+            "-m",
+            dest="mode",
+            choices=["analysis", "classification"],
+            default="analysis",
+            help="Mode of operation: 'analysis' for visualization, 'classification' for bot classification"
             )
-
-    classification_parser = subparser.add_parser(
-        "classification",
-        parents=[base_parser],
-        help="Classify bots based on trading data"
-        )
-    classification_parser.add_argument(
-        "--clusters",
-        "-k",
-        dest="clusters",
-        type=int,
-        default=10,
-        help="The number of clusters to use for bot classification"
-        )
-
     args = parser.parse_args()
 
     # Parsing files must be passed
@@ -61,14 +42,14 @@ def main():
         else:
             parser.error(f"Unknown file: {file}")
 
-    if args.command == "analysis":
+    if args.mode == "analysis":
         analyze_data(files)
-    elif args.command == "classification":
+    elif args.mode == "classification":
         # Placeholder for classification logic
         data = collate_data(files)
         if data is None:
             parser.error("No valid data for classification")
-        classify_bots(data, args.clusters)
+        classify_bots(data)
 
 
 if __name__ == "__main__":
