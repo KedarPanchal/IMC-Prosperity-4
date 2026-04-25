@@ -4,10 +4,14 @@ from collections import defaultdict
 import re
 
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-from scipy.spatial import Voronoi, voronoi_plot_2d
+
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 import mplcursors
+from scipy.spatial import Voronoi, voronoi_plot_2d
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
@@ -15,6 +19,42 @@ from sklearn.decomposition import PCA
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
+
+def _make_plot():
+    fig = plt.figure(figsize=(16, 8))
+    gs = gridspec.GridSpec(
+        nrows=1,
+        ncols=2,
+        figure=fig,
+        left=0.05,
+        right=0.95,
+        top=0.9,
+        bottom=0.1,
+        wspace=0.25,
+        hspace=0.5,
+        width_ratios=[1, 3],
+        )
+    try:
+        fig.canvas_manager.set_window_title("Trading Bot Classification")  # type: ignore
+    except AttributeError:
+        print("Warning: Unable to set window title; feature may be unsupported in this environment")
+
+    fig.suptitle("Trading Bot Classification")
+
+    control_axes = fig.add_subplot(gs[0, 0])
+    control_axes.set_xticks([])
+    control_axes.set_yticks([])
+    control_axes.set_frame_on(False)
+
+    data_axes = fig.add_subplot(gs[0, 1])
+
+    return fig, data_axes, control_axes
+
+
+def _voronoi_gui(fig: Figure, axes: Axes, data: np.ndarray):
+    pass
+
+# -- MAIN LOGIC ---------------------------------------------------------------
 
 def collate_data(files: list[str]) -> pd.DataFrame | None:
     """Collate data from multiple files into a single dataset for
@@ -171,9 +211,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     kmeans.fit(pca_features)
 
     # Plot the clusters in a Voronoi diagram
-    fig = plt.figure(figsize=(16, 8))
-    axes = fig.add_subplot(1, 1, 1)
-    fig.subplots_adjust(right=0.8, bottom=0.2, top=0.8)
+    fig, axes, control_axes = _make_plot()
 
     colormap = plt.get_cmap("viridis", clusters)
     scatter = axes.scatter(
@@ -186,6 +224,7 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
             s=10,
             picker=8
             )
+
     if len(kmeans.cluster_centers_) >= 2:
         voronoi = Voronoi(kmeans.cluster_centers_)
         voronoi_plot_2d(
@@ -216,27 +255,26 @@ def classify_bots(data: pd.DataFrame, clusters: int) -> None:
     }
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
 
-    # TODO: Add descriptions showing composition of PCA axes
-    contributions = np.square(pca.components_)
-    contributions = contributions / contributions.sum(axis=1, keepdims=True)
-    contributions_dataframe = pd.DataFrame(
-            contributions * 100,
-            columns=features.columns
-            )
-    fig.text(
-        0.82,
-        0.55,
-        "PCA Component 1 Composition:\n\n" +
-        '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
-        bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
-        )
-    fig.text(
-        0.82,
-        0.225,
-        "PCA Component 2 Composition:\n\n" +
-        '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
-        bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
-        )
+    # contributions = np.square(pca.components_)
+    # contributions = contributions / contributions.sum(axis=1, keepdims=True)
+    # contributions_dataframe = pd.DataFrame(
+    #         contributions * 100,
+    #         columns=features.columns
+    #         )
+    # fig.text(
+    #     0.82,
+    #     0.55,
+    #     "PCA Component 1 Composition:\n\n" +
+    #     '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
+    #     bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
+    #     )
+    # fig.text(
+    #     0.82,
+    #     0.225,
+    #     "PCA Component 2 Composition:\n\n" +
+    #     '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
+    #     bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
+    #     )
 
     @cursor.connect("add")
     def on_add(sel):
