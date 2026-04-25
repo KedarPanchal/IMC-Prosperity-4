@@ -99,13 +99,27 @@ def _plot_data(data_axes: Axes, data: np.ndarray, k: int, seed: int):
 
 
 def _kmeans_gui(fig: Figure, data: np.ndarray, control_axes: Axes, data_axes: Axes):
-    k_axes = control_axes.inset_axes((0.05, 0.4, 0.7, 0.04))
+    """Create a GUI for adjusting the number of clusters (k) and random seed
+    for k-means clustering.
+
+    Args:
+        fig: The figure to add the GUI to.
+        data: The PCA-transformed data to plot.
+        control_axes: The axes to add the GUI controls to.
+        data_axes: The axes to update with the new clustering results when the
+        controls are adjusted.
+
+    Returns:
+        The TextBox widgets for k and random seed since matplotlib requires
+        keeping references to them to prevent garbage collection.
+    """
+    k_axes = control_axes.inset_axes((0.6, 0.8, 0.42, 0.04))
     k_label = widgets.TextBox(
         k_axes,
         label="Number of Clusters (k): ",
         initial="10"
         )
-    seed_axes = control_axes.inset_axes((0.25, 0.35, 0.7, 0.04))
+    seed_axes = control_axes.inset_axes((0.4, 0.75, 0.62, 0.04))
     seed_label = widgets.TextBox(
         seed_axes,
         label="Random Seed: ",
@@ -134,6 +148,34 @@ def _kmeans_gui(fig: Figure, data: np.ndarray, control_axes: Axes, data_axes: Ax
     seed_label.on_submit(change_kmeans)
 
     return k_label, seed_label
+
+
+def _pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
+    contributions = np.square(pca.components_)
+    contributions = contributions / contributions.sum(axis=1, keepdims=True)
+    contributions_dataframe = pd.DataFrame(
+            contributions * 100,
+            columns=features.columns
+            )
+    pca1_text = control_axes.text(
+        0.05,
+        0.65,
+        "PCA Component 1 Composition:\n\n" +
+        '\n'.join(f"{col}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
+        transform=control_axes.transAxes,
+        verticalalignment='top'
+        )
+    pca2_text = control_axes.text(
+        0.05,
+        0.25,
+        "PCA Component 2 Composition:\n\n" +
+        '\n'.join(f"{col}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
+        bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
+        transform=control_axes.transAxes,
+        verticalalignment='top'
+        )
+    return pca1_text, pca2_text
 
 
 # -- MAIN LOGIC ---------------------------------------------------------------
@@ -309,27 +351,6 @@ def classify_bots(data: pd.DataFrame) -> None:
     }
     cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
 
-    # contributions = np.square(pca.components_)
-    # contributions = contributions / contributions.sum(axis=1, keepdims=True)
-    # contributions_dataframe = pd.DataFrame(
-    #         contributions * 100,
-    #         columns=features.columns
-    #         )
-    # fig.text(
-    #     0.82,
-    #     0.55,
-    #     "PCA Component 1 Composition:\n\n" +
-    #     '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
-    #     bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
-    #     )
-    # fig.text(
-    #     0.82,
-    #     0.225,
-    #     "PCA Component 2 Composition:\n\n" +
-    #     '\n'.join(f"{COL_NAMES.get(col, col)}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
-    #     bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
-    #     )
-
     @cursor.connect("add")
     def on_add(sel):
         index = sel.index
@@ -348,6 +369,8 @@ def classify_bots(data: pd.DataFrame) -> None:
             )
 
     # Show the GUI for adjusting k and random seed
+    # Also show the PCA component contributions
     _ = _kmeans_gui(fig, pca_features, control_axes, axes)
+    _pca_contributions(pca, features, control_axes)
     # Actually plot the clusters
     plt.show()
