@@ -1,6 +1,6 @@
 # IMC Prosperity 4 Visualizer
 
-This tool opens interactive charts to explore IMC Prosperity 4 CSV data (trades and/or prices). You can zoom and pan like a normal chart, and you can hover points to see the exact timestamp/value.
+This tool opens interactive charts to explore IMC Prosperity 4 CSV data (trades and/or prices). You can zoom and pan like a normal chart, and you can hover over points to see the exact timestamp and value.
 
 ## What you need first
 
@@ -40,9 +40,9 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 uv --version
 ```
 
-If that prints a version number, you’re good.
+If that prints a version number, you're good.
 
-## Install the visualizer’s dependencies (one-time)
+## Install the visualizer's dependencies (one-time)
 
 From the repository root, go into the `visualization` folder and install dependencies:
 
@@ -51,104 +51,174 @@ cd visualization
 uv sync
 ```
 
-`uv sync` may take a minute the first time. After it finishes, you typically won’t need to do it again unless the project’s dependencies change.
+`uv sync` may take a minute the first time. After it finishes, you typically won't need to do it again unless the project's dependencies change.
 
-## Run: interactive visualization (`analysis`)
+---
 
-Stay in the `visualization` folder and run:
+## Running the tool
 
-```bash
-uv run visualization.py analysis -f path/to/file1.csv path/to/file2.csv
+All commands follow this pattern (run from inside the `visualization` folder):
+
+```
+uv run visualization.py -f <file1.csv> [file2.csv ...] -m <mode>
 ```
 
-Notes:
+- **`-f` / `--files`** — one or more CSV paths to load (required)
+- **`-m` / `--mode`** — what to do with the data: `analysis` (default) or `classification`
 
-- These CSVs are usually **semicolon-separated** (`;`) (that’s the standard IMC export format).
-- If you pass multiple files, the tool will group them into sensible charts:
-  - Trade files show trade prices/quantities by product, plus an overall “master” price view.
-  - Price/orderbook files show bid/ask/fair value and volumes, plus an overall “master” view.
-  - If you pass both types, you’ll typically get **two windows** (one for trades, one for prices).
-- Files must be passed via `--files` / `-f` (positional arguments aren’t supported).
+### File naming requirements
 
-```bash
-uv run visualization.py analysis --files path/to/file1.csv path/to/file2.csv
-```
+Every CSV filename **must** include a day marker like `day_0`, `day_1`, `day_-1`, etc. The tool uses this to sort and stitch multiple days together in the right order. Files without a day marker are skipped with a warning.
 
-- If a chart looks “wrong”, you may have passed the other dataset type. The tool auto-detects the file type from its columns.
-- If you pass multiple days of data, filenames should include a day marker like `day_0`, `day_1`, etc., so the tool can plot days in the right order.
+> **Example good names:** `prices_day_0.csv`, `trades_day_1.csv`, `round2_day_-1_prices.csv`
 
-## Optional: denoise for feature extraction and trend analysis
+---
 
-Market data is often “wiggly” at short time scales. Denoising helps you see the **bigger picture** (trend, broad moves, and turning points) by smoothing out small, fast fluctuations before plotting.
+## Mode: `analysis` — interactive price/trade charts
 
-### Choose a denoising strategy
+Loads the CSV files and opens one or two chart windows (one for trade data, one for price/orderbook data — whichever types you provided).
 
 ```bash
-uv run visualization.py analysis -f path/to/file.csv --strategy haar
+uv run visualization.py -f path/to/prices_day_0.csv path/to/trades_day_0.csv -m analysis
 ```
 
-Supported strategies (high-level):
-
-- `identity` (default): no smoothing, raw data
-- `ema`: a simple smoothing option that reacts gradually to changes
-- `haar`: a stronger “de-noise the bumps” option that can make the line cleaner
-- `dft`: frequency-based smoothing (often good for removing rapid oscillations, but see the note below)
-
-### Control denoising strength with `--passes`
-
-`--passes` controls how strong the smoothing is (default is `2`). More passes usually means a smoother line, with diminishing returns.
+Or, since `analysis` is the default, you can omit `-m`:
 
 ```bash
-uv run visualization.py analysis -f path/to/file.csv --strategy haar --passes 4
+uv run visualization.py -f path/to/prices_day_0.csv path/to/trades_day_0.csv
 ```
 
-- If the chart still looks noisy, increase `--passes`.
-- If the chart feels “laggy” or misses sharp moves/turns, reduce `--passes`.
+**Notes:**
+- CSVs are **semicolon-separated** (`;`) — that's the standard IMC export format.
+- The tool auto-detects whether a file is a trade file or a price/orderbook file based on its columns:
+  - Trade files must have a `buyer` column.
+  - Price/orderbook files must have a `profit_and_loss` column.
+- If a chart looks wrong, you may have passed a file of the other type.
+- If you pass multiple days of data, timestamps are stitched together so later days appear to the right on the chart.
 
-#### Note on `dft` artifacts (edge tail dropoffs)
+### What you see in the chart
 
-`dft` can sometimes create **start/end “tail” dropoffs**, due to the data entries not exactly aligning with the "frequency" the algorithm assigns to it. If you see that, try fewer `--passes` or switch to `ema` or `haar`.
+**Trade data window** (one subplot per product):
+- **Row 1** — trade price over time (green)
+- **Row 2** — trade quantity over time (blue)
+- **Bottom strip** — all products' trade prices overlaid in one "All Items" view
 
-## Run: bot clustering (`classification`)
+**Price/orderbook data window** (one subplot per product):
+- **Row 1** — bid price (green), ask price (red), and fair value/mid price (blue)
+- **Row 2** — bid volume (blue) and ask volume (orange)
+- **Bottom strip** — all products' bid, ask, and fair value prices overlaid
 
-There is also a helper that groups “bots” by similar trading behavior (a quick way to spot who trades similarly).
+Hovering over any line shows a tooltip with the exact timestamp and value.
 
-It expects **matching trade + price CSVs** for the same day(s):
+### Left-side control panel (analysis mode)
 
-- Trade logs (filenames typically contain `trades`) provide executed trades (e.g., `buyer`, `seller`, `price`, `quantity`).
-- Price/orderbook logs (filenames typically contain `prices`) provide the market state (including `mid_price`).
+Both windows have a control panel on the left side. It lets you smooth the data live without re-running the tool.
 
-The classifier expects filenames to include a day marker like `day_0`, `day_1`, etc., so it can line up days correctly.
+#### Denoising strategy (radio buttons)
 
-### What clustering uses (high-level)
+Choose how to smooth the plotted lines:
 
-It summarizes each trader’s behavior (per product and over time) using simple signals like:
+| Strategy | What it does |
+|---|---|
+| **identity** | No smoothing — shows raw data exactly as-is (default) |
+| **ema** | Exponential Moving Average — reacts gradually to changes; gentler smoothing |
+| **haar** | Haar wavelet — removes spiky noise while preserving sharper moves |
+| **dft** | Discrete Fourier Transform — removes rapid oscillations using frequency filtering |
 
-- How active they are (how often / how much they trade)
-- Whether they tend to buy vs sell
-- How their trading lines up with price moves
+Click a radio button to apply the strategy immediately.
 
-Run:
+> **Note on `dft`:** It can sometimes produce a visible "dropoff" at the very start or end of the chart. If you see that, try `ema` or `haar` instead, or reduce the number of passes.
+
+#### Passes (text box)
+
+Controls how *strong* the smoothing is. Default is **6**.
+
+- Type a number and press **Enter** to apply.
+- Higher passes → smoother line, but may miss sharp turns.
+- Lower passes → less smoothed, closer to raw data.
+
+#### Alpha — EMA only (text box)
+
+Only relevant when **ema** is selected. Default is **0.5**.
+
+- Must be a decimal between 0 and 1 (exclusive).
+- **Closer to 1** → reacts quickly to new data (less smoothing).
+- **Closer to 0** → reacts slowly (more smoothing, more lag).
+
+#### Show/hide checkboxes (price window only)
+
+The price/orderbook window also has checkboxes to toggle individual series on and off:
+
+| Checkbox | Toggles |
+|---|---|
+| **Show bid price** | Bid price lines in the per-product subplots and the "All Items" strip |
+| **Show ask price** | Ask price lines in the per-product subplots and the "All Items" strip |
+| **Show fair value price** | Mid/fair value price lines everywhere |
+| **Show bid volume** | Bid volume lines in the volume subplot |
+| **Show ask volume** | Ask volume lines in the volume subplot |
+
+---
+
+## Mode: `classification` — trading pattern clustering
+
+Groups time windows of market activity into clusters based on price and volume behavior. Useful for spotting patterns like high-volatility periods, low-activity lulls, or unusual price moves.
+
+### File requirements
+
+Classification requires **both** trade files and price files for **the same set of days**:
+
+- Trade filenames must contain the word **`trades`** somewhere in the name.
+- Price filenames must contain the word **`prices`** somewhere in the name.
+- Both must include a `day_#` marker.
+
+If you provide trades for 2 days but prices for only 1 day (or vice versa), the tool will stop with an error.
 
 ```bash
-uv run visualization.py classification -f path/to/day_0_trades.csv path/to/day_0_prices.csv
+uv run visualization.py -f path/to/trades_day_0.csv path/to/prices_day_0.csv -m classification
 ```
 
-Notes:
+### What you see in the chart
 
-- You must provide the **same set of days** for trades and prices. If you pass trades for 2 days but prices for only 1 day (or vice versa), the classifier will stop with an error.
-- If a file is missing a `day_#` marker in its name, it will be skipped.
+The classification window shows a **scatter plot** where each dot represents a 2-second time window. The axes are two "PCA components" — mathematical summaries of the data that try to capture the most variation. Points that are close together behaved similarly during that window; points that are far apart behaved differently.
 
-Tune cluster count (default \(k=10\)):
+The dots are colored by cluster (group), and **Voronoi boundaries** are drawn between cluster centers to show where one group ends and another begins.
 
-```bash
-uv run visualization.py classification -f path/to/day_0_trades.csv path/to/day_0_prices.csv --clusters 15
-```
+Hovering over a dot shows a tooltip with the time window's start timestamp and the key metrics that went into that point (mid-price open/close/high/low, total volume, number of trades, average trade size, and the assigned cluster).
+
+### Left-side control panel (classification mode)
+
+#### Number of Clusters (k) (text box)
+
+How many groups to divide the data into. Default is **10**.
+
+- Type a number and press **Enter** to recompute the clusters immediately.
+- Fewer clusters → broader, coarser groups.
+- More clusters → finer distinctions, but may over-split similar behavior.
+
+#### Random Seed (text box)
+
+K-means clustering has a small random component in how it picks starting points. The seed makes results reproducible. Default is **0**.
+
+- Type any non-negative integer and press **Enter** to recompute.
+- Changing the seed with the same k will sometimes give slightly different cluster assignments.
+
+#### PCA Component breakdown
+
+Below the controls, two colored info boxes show what metrics contribute most to each PCA axis:
+
+- **PCA Component 1** (blue box) — the main axis of variation in the data.
+- **PCA Component 2** (green box) — the secondary axis.
+
+Each metric is listed with its percentage contribution. This helps you understand what the x/y axes actually mean (e.g., "Component 1 is mostly total volume and number of trades").
+
+---
 
 ## Troubleshooting
 
-- If you get “Unknown file”: double-check the path and that the file exists.
-- If nothing shows up: make sure the window isn’t opening behind other windows; also confirm you’re running from the `visualization` folder.
-- If the chart looks empty or says it found no data: you may have provided a CSV with unexpected columns/formatting.
-- If you see “Unknown data being analyzed”: the CSV didn’t match the expected schemas (trade files need a `buyer` column; price/orderbook files need a `profit_and_loss` column).
-- If `classification` says it processed a different number of trade vs price files: make sure you passed a **matching trades+prices pair for every day**, and that each filename contains `day_#`.
+- **"Unknown file"**: Double-check the path and that the file exists.
+- **Nothing shows up / window opens behind others**: Make sure you're running from the `visualization` folder, and check that the chart window didn't open behind other windows.
+- **Chart looks empty**: Confirm the CSV has actual data rows and uses semicolons (`;`) as the separator.
+- **"Warning: File … does not contain a valid day number"**: Rename the file to include `day_0`, `day_1`, etc. in its filename.
+- **"Warning: File … is not a valid trade or price data file"** (analysis mode): The CSV didn't match either expected schema. Trade files need a `buyer` column; price files need a `profit_and_loss` column.
+- **"Warning: File … is not a valid trade or price dataframe"** (classification mode): The filename must contain `trades` or `prices` for the classifier to tell them apart.
+- **"Error: Processed N trade dataframes but only M price dataframes"**: You didn't pass a matching trade+price pair for every day. Make sure each day has exactly one trades file and one prices file.
