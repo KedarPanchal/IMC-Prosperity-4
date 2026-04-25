@@ -476,17 +476,17 @@ def _analyze_price_data(data: pd.DataFrame):
             data=bid_quantity_artists_data_raw[-1],
             data_label="bid",
             data_color="blue",
-            artists=bid_quantity_artists
+            artists=bid_quantity_artists,
+            show_legend=True
             )
-
-        # Plot the ask quantity data
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             timestamps=ask_timestamps,
             data=ask_quantity_artists_data_raw[-1],
             data_label="ask",
             data_color="orange",
-            artists=ask_quantity_artists
+            artists=ask_quantity_artists,
+            show_legend=True
             )
 
         # Plot the bid/ask/fair value price on the master plot
@@ -591,6 +591,7 @@ def _analyze_price_data(data: pd.DataFrame):
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
+    # Render control panel
     _ = _denoise_gui(
         fig,
         control_axes,
@@ -615,6 +616,26 @@ def _analyze_price_data(data: pd.DataFrame):
             mid_price_artists_data_raw,
         ]
         )
+    bid_ask_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
+    bid_ask_mapping = {
+        "Show bid price": bid_price_artists + bid_master_artists,
+        "Show ask price": ask_price_artists + ask_master_artists,
+        "Show fair value price": mid_price_artists + mid_master_artists,
+        "Show bid volume": bid_quantity_artists,
+        "Show ask volume": ask_quantity_artists,
+    }
+    bid_ask_checkbox = widgets.CheckButtons(
+        bid_ask_checkbox_axes,
+        labels=list(bid_ask_mapping.keys()),
+        actives=[True] * len(bid_ask_mapping.keys())
+        )
+
+    def toggle_bid_ask(label):
+        for artist in bid_ask_mapping[label]:
+            artist.set_visible(not artist.get_visible())
+        fig.canvas.draw_idle()
+
+    bid_ask_checkbox.on_clicked(toggle_bid_ask)
 
     # Actually plot everything
     ax_master.legend()
