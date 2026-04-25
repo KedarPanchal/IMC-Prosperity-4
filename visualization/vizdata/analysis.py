@@ -8,9 +8,13 @@ from collections import defaultdict
 import re
 
 import pandas as pd
+import numpy as np
 
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import matplotlib.widgets as widgets
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import mplcursors
 
 from vizdata.denoise import DENOISING_STRATEGIES
@@ -57,21 +61,47 @@ def _make_plots(title: str, rows: int, cols: int):
         (without the bottom row) and ``axes_master`` is the bottom summary
         axis in lieu of the original bottom row.
     """
-    fig, axes = plt.subplots(rows, cols, figsize=(16, 8), squeeze=False)
+    fig = plt.figure(figsize=(16, 8))
+    gs = gridspec.GridSpec(
+        nrows=rows + 1,
+        ncols=cols + 1,
+        figure=fig,
+        left=0.05,
+        right=0.95,
+        top=0.90,
+        bottom=0.1,
+        wspace=0.25,
+        hspace=0.5,
+        width_ratios=[1.2] + [2] * cols,
+        )
     try:
         fig.canvas.manager.set_window_title(title)  # type: ignore
     except AttributeError:
         print("Warning: Unable to set window title; feature may be unsupported in this environment.")
+
     fig.suptitle(title)
 
-    for ax in axes[-1]:
-        ax.remove()
-    axes_master = fig.add_subplot(rows, 1, rows)
+    control_axes = fig.add_subplot(gs[:, 0])
+    control_axes.set_xticks([])
+    control_axes.set_yticks([])
+    control_axes.set_frame_on(False)
+
+    axes = []
+    for r in range(rows):
+        row_axes = []
+        for c in range(cols):
+            ax = fig.add_subplot(gs[r, c + 1])
+            ax.xaxis.set_major_formatter(_formatter)
+            ax.yaxis.set_major_formatter(_formatter)
+            row_axes.append(ax)
+        axes.append(row_axes)
+
+    axes_master = fig.add_subplot(gs[rows, 1:])
     axes_master.set_title("All Items")
     axes_master.xaxis.set_major_formatter(_formatter)
     axes_master.yaxis.set_major_formatter(_formatter)
 
-    return fig, axes, axes_master
+    return fig, np.array(axes), axes_master, control_axes
 
 
 def _plot_data(
@@ -125,20 +155,38 @@ def _plot_data(
         axis.legend()
 
 
-def _denoise_gui(fig, artists_list: list[list], raw_data_list: list[list]):
+def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_list: list[list]):
+    """Renders a simple GUI with controls for denoising the plotted data using
+    different strategies.
+
+    Args:
+        fig: The matplotlib figure to which the GUI will be attached.
+        axes: The axes on which to place the GUI controls.
+        artists_list: A list of lists of matplotlib line artists corresponding
+        to the plotted data series.
+        raw_data_list: A list of lists of raw data corresponding to each artist
+        list, used for applying the denoising transformations.
+
+    Returns:
+        The created GUI controls (buttons and text boxes) since matplotlib
+        requires keeping references to them to prevent garbage collection.
+    """
+    button_axes = axes.inset_axes((0.05, 0.4, 0.9, 0.15))
     button = widgets.RadioButtons(
-            plt.axes((0.01, 0.4, 0.1, 0.15)),
+            button_axes,
             labels=list(DENOISING_STRATEGIES.keys()),
             active=list(DENOISING_STRATEGIES.keys()).index("identity")
             )
+    passes_axes = axes.inset_axes((0.25, 0.35, 0.7, 0.04))
     passes = widgets.TextBox(
-            plt.axes((0.01, 0.35, 0.1, 0.04)),
-            label="",
+            passes_axes,
+            label="Passes: ",
             initial="6",
             )
+    alpha_axes = axes.inset_axes((0.52, 0.3, 0.43, 0.04))
     alpha = widgets.TextBox(
-            plt.axes((0.01, 0.3, 0.1, 0.04)),
-            label="",
+            alpha_axes,
+            label="Alpha (EMA only): ",
             initial="0.5",
             )
 
@@ -189,7 +237,7 @@ def _analyze_trade_data(
     # Create a subplot for each trade item
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
-    fig, axes, ax_master = _make_plots(
+    fig, axes, ax_master, control_axes = _make_plots(
             "Trade Data Analysis",
             3,
             len(set(data["symbol"])),
@@ -292,6 +340,7 @@ def _analyze_trade_data(
 
     _ = _denoise_gui(
         fig,
+        control_axes,
         artists_list=[price_artists, quantity_artists, master_artists],
         raw_data_list=[price_artists_data_raw, quantity_artists_data_raw, price_artists_data_raw]
         )
@@ -325,7 +374,7 @@ def _analyze_price_data(data: pd.DataFrame):
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
-    fig, axes, ax_master = _make_plots(
+    fig, axes, ax_master, control_axes = _make_plots(
             "Price Data Analysis",
             4,
             len(set(data["product"])),
@@ -547,6 +596,7 @@ def _analyze_price_data(data: pd.DataFrame):
 
     _ = _denoise_gui(
         fig,
+        control_axes,
         artists_list=[
             bid_price_artists,
             ask_price_artists,
