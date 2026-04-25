@@ -312,7 +312,7 @@ def _analyze_price_data(
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
     # Row 4 contains a master subplot of all the price items
-    _, axes, ax_master = _make_plots(
+    fig, axes, ax_master = _make_plots(
             "Price Data Analysis",
             4,
             len(set(data["product"])),
@@ -320,10 +320,15 @@ def _analyze_price_data(
 
     # Create arrays to store each artist for rendering the cursors
     bid_price_artists = []
+    bid_price_artists_data_raw = []
     ask_price_artists = []
-    mid_artists = []
+    ask_price_artists_data_raw = []
+    mid_price_artists = []
+    mid_price_artists_data_raw = []
     bid_quantity_artists = []
+    bid_quantity_artists_data_raw = []
     ask_quantity_artists = []
+    ask_quantity_artists_data_raw = []
     bid_master_artists = []
     ask_master_artists = []
     mid_master_artists = []
@@ -363,16 +368,16 @@ def _analyze_price_data(
         mid_timestamps = data.loc[mask & nonzero_mid, "timestamp"].to_list()
 
         # Plot the bid/ask/fair value price data
-        bid_prices = denoiser(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
-        ask_prices = denoiser(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
-        mid_prices = denoiser(data.loc[mask & nonzero_mid, "mid_price"].to_list())
+        bid_price_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_price_1", "bid_price_2", "bid_price_3"]].mean(axis=1).to_list())
+        ask_price_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_price_1", "ask_price_2", "ask_price_3"]].mean(axis=1).to_list())
+        mid_price_artists_data_raw.append(data.loc[mask & nonzero_mid, "mid_price"].to_list())
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
             title=f"Bid/Ask Prices{' (denoised)' if denoised else ''}",
             title_color="green",
             timestamps=bid_timestamps,
-            data=bid_prices,
+            data=bid_price_artists_data_raw[-1],
             data_label="bid",
             data_color="green",
             artists=bid_price_artists,
@@ -381,7 +386,7 @@ def _analyze_price_data(
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             timestamps=ask_timestamps,
-            data=ask_prices,
+            data=ask_price_artists_data_raw[-1],
             data_label="ask",
             data_color="red",
             artists=ask_price_artists,
@@ -390,48 +395,36 @@ def _analyze_price_data(
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             timestamps=mid_timestamps,
-            data=mid_prices,
+            data=mid_price_artists_data_raw[-1],
             data_label="fair value",
             data_color="blue",
-            artists=mid_artists,
+            artists=mid_price_artists,
             show_legend=True
             )
 
-        # Plot EMA only if the denoising strategy is identity
-        if not denoised:
-            ema_prices = data.loc[mask & nonzero_mid, "mid_price"].ewm(alpha=alpha).mean().to_list()
-            _plot_data(
-                axis=axes[0, plot],  # type: ignore
-                timestamps=mid_timestamps,
-                data=ema_prices,
-                data_label=f"EMA (alpha={alpha})",
-                data_color="yellow",
-                show_legend=True
-                )
-
         # Plot the bid quantity data
-        bid_volumes = denoiser(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
+        bid_quantity_artists_data_raw.append(data.loc[mask & nonzero_bids, ["bid_volume_1", "bid_volume_2", "bid_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
             title=f"Bid Volume{' (denoised)' if denoised else ''}",
             title_color="blue",
             timestamps=bid_timestamps,
-            data=bid_volumes,
+            data=bid_quantity_artists_data_raw[-1],
             data_label="bid",
             data_color="blue",
             artists=bid_quantity_artists
             )
 
         # Plot the ask quantity data
-        ask_volumes = denoiser(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
+        ask_quantity_artists_data_raw.append(data.loc[mask & nonzero_asks, ["ask_volume_1", "ask_volume_2", "ask_volume_3"]].mean(axis=1).to_list())
         _plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
             title=f"Ask Volume{' (denoised)' if denoised else ''}",
             title_color="orange",
             timestamps=ask_timestamps,
-            data=ask_volumes,
+            data=ask_quantity_artists_data_raw[-1],
             data_label="ask",
             data_color="orange",
             artists=ask_quantity_artists
@@ -441,7 +434,7 @@ def _analyze_price_data(
         bid_master_artists.extend(
                 ax_master.plot(
                     bid_timestamps,
-                    bid_prices,
+                    bid_price_artists_data_raw[-1],
                     linewidth=0.8,
                     label=f"{symbol} bid",
                     picker=8
@@ -450,7 +443,7 @@ def _analyze_price_data(
         ask_master_artists.extend(
                 ax_master.plot(
                     ask_timestamps,
-                    ask_prices,
+                    ask_price_artists_data_raw[-1],
                     linewidth=0.8,
                     label=f"{symbol} ask",
                     picker=8
@@ -459,7 +452,7 @@ def _analyze_price_data(
         mid_master_artists.extend(
                 ax_master.plot(
                     mid_timestamps,
-                    mid_prices,
+                    mid_price_artists_data_raw[-1],
                     linewidth=0.8,
                     label=f"{symbol} fair value",
                     color="blue",
@@ -469,7 +462,7 @@ def _analyze_price_data(
 
     # Create cursor for the price plot
     price_cursor = mplcursors.cursor(
-            [*bid_price_artists, *ask_price_artists, *mid_artists],
+            [*bid_price_artists, *ask_price_artists, *mid_price_artists],
             hover=mplcursors.HoverMode.Transient
             )
 
@@ -538,6 +531,30 @@ def _analyze_price_data(
             sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if denoised else ''}: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
+
+    _ = _denoise_gui(
+        fig,
+        artists_list=[
+            bid_price_artists,
+            ask_price_artists,
+            mid_price_artists,
+            bid_quantity_artists,
+            ask_quantity_artists,
+            bid_master_artists,
+            ask_master_artists,
+            mid_master_artists
+        ],
+        raw_data_list=[
+            bid_price_artists_data_raw,
+            ask_price_artists_data_raw,
+            mid_price_artists_data_raw,
+            bid_quantity_artists_data_raw,
+            ask_quantity_artists_data_raw,
+            bid_price_artists_data_raw,
+            ask_price_artists_data_raw,
+            mid_price_artists_data_raw,
+        ]
+        )
 
     # Actually plot everything
     ax_master.legend()
