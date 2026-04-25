@@ -62,11 +62,11 @@ def _plot_data(data_axes: Axes, data: np.ndarray, k: int, seed: int):
 
 
 def _kmeans_gui(
-        fig: Figure,
-        data: np.ndarray,
-        control_axes: Axes,
-        data_axes: Axes
-        ):
+    fig: Figure,
+    data: np.ndarray,
+    control_axes: Axes,
+    data_axes: Axes
+    ):
     """Create a GUI for adjusting the number of clusters (k) and random seed
     for k-means clustering.
 

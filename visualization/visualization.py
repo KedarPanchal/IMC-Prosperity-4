@@ -6,6 +6,7 @@ import os
 from vizdata.analysis import analyze_data
 from vizdata.mlutils import collate_data
 from vizdata.botclassifier import classify_bots
+from vizdata.outlier import detect_outliers
 
 
 # -- CLI ----------------------------------------------------------------------
@@ -60,7 +61,10 @@ def main():
             parser.error("No valid data for classification")
         classify_bots(data)
     elif args.mode == "outlier":
-        pass  # Placeholder for outlier detection logic
+        data = collate_data(files)
+        if data is None:
+            parser.error("No valid data for outlier detection")
+        detect_outliers(data)
     else:
         parser.error(f"Unknown mode: {args.mode}")
 
