@@ -522,6 +522,41 @@ def _plot_price_data(
         ask_master_artists: list,
         mid_master_artists: list
         ):
+    """Plot bid/ask/fair price and volumes for a single price item in a subplot, and add the price series to the master plot.
+
+    Args:
+        data: The full price data DataFrame.
+        plot: The column index of the subplot to use for this item.
+        symbol: The price item symbol to filter the data by.
+        axes: The array of subplot axes.
+        ax_master: The master axis for plotting all items together.
+        bid_price_artists: Mutable list extended with the line artist(s) for
+        them bid price series.
+        bid_price_artists_data_raw: Mutable list extended with the raw bid
+        price data for this item.
+        ask_price_artists: Mutable list extended with the line artist(s) for
+        them ask price series.
+        ask_price_artists_data_raw: Mutable list extended with the raw ask
+        price data for this item.
+        mid_price_artists: Mutable list extended with the line artist(s) for
+        them mid price series.
+        mid_price_artists_data_raw: Mutable list extended with the raw mid
+        price data for this item.
+        bid_quantity_artists: Mutable list extended with the line artist(s)
+        for them bid quantity series.
+        bid_quantity_artists_data_raw: Mutable list extended with the raw bid
+        quantity data for this item.
+        ask_quantity_artists: Mutable list extended with the line artist(s) for
+        them ask quantity series.
+        ask_quantity_artists_data_raw: Mutable list extended with the raw ask
+        quantity data for this item.
+        bid_master_artists: Mutable list extended with the line artist(s) for
+        the bid price series on the master plot.
+        ask_master_artists: Mutable list extended with the line artist(s) for
+        the ask price series on the master plot.
+        mid_master_artists: Mutable list extended with the line artist(s) for
+        the mid price series on the master plot.
+    """
     # Compute masks for rows with nonzero bid/ask volumes and mid price
     # Avoid plotting zero values to reduce noise
     nonzero_bids = pd.notna(
