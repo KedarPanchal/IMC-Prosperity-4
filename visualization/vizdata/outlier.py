@@ -100,10 +100,56 @@ def _plot_decision_data(
 
 def _outliers_gui(
         fig: Figure,
-        data_axes: Axes,
         data: np.ndarray,
+        isolation_axes: Axes,
+        decision_axes: Axes,
+        control_axes: Axes,
         ):
-    pass
+    tree_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
+    tree_label = widgets.TextBox(
+        tree_axes,
+        label="Number of Trees: ",
+        initial="100"
+        )
+    seed_axes = control_axes.inset_axes((0.4, 0.90, 0.62, 0.04))
+    seed_label = widgets.TextBox(
+        seed_axes,
+        label="Random Seed: ",
+        initial="0"
+        )
+
+    def change_isolation(label):
+        try:
+            tree_count = int(tree_label.text)
+            seed = int(seed_label.text)
+            if tree_count <= 0:
+                print("Warning: Number of trees must be positive, defaulting to 100")
+                tree_count = 100
+            if seed < 0:
+                print("Warning: Random seed must be non-negative, defaulting to 0")
+                seed = 0
+        except ValueError:
+            print("Warning: Invalid input for number of trees or random seed, defaulting to 100 trees and seed 0")
+            tree_count = 100
+            seed = 0
+
+        isolation, *_ = _plot_isolation_data(
+            isolation_axes,
+            data,
+            tree_count=tree_count,
+            seed=seed
+            )
+        _plot_decision_data(
+            isolation,
+            decision_axes,
+            data
+            )
+        fig.canvas.draw_idle()
+
+    tree_label.on_submit(change_isolation)
+    seed_label.on_submit(change_isolation)
+
+    return tree_label, seed_label
 
 
 # -- MAIN LOGIC ---------------------------------------------------------------
@@ -157,7 +203,9 @@ def detect_outliers(data: pd.DataFrame):
         sel.annotation.get_bbox_patch().set_alpha(0.95)
         sel.annotation.get_bbox_patch().set_facecolor("red" if sorted_decision_scores[index] < 0 else "green")  # type: ignore
 
-    # Show the PCA component contributions
+    # Show the GUI for adjusting isolation forest parameters
+    # Also show the PCA component contributions
+    _ = _outliers_gui(fig, scaled, isolation_axes, split_axes, control_axes)
     pca_contributions(pca, features, control_axes)
     # Actually plot the outliers
     plt.show()
