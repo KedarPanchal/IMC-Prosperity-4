@@ -47,8 +47,8 @@ def _formatter(value: Any, discard: Any):
 def _make_plots(title: str, rows: int, cols: int):
     """Create a subplot grid and a full-width bottom axis for combined series.
 
-    The last row of the grid is removed and replaced by ``axes_master``, which
-    spans the figure width for overlaying all items.
+    The last row of the grid is a master axis with a shared x-axis and spans
+    the figure width for overlaying all items.
 
     Args:
         title: Figure suptitle and window title.
@@ -68,7 +68,7 @@ def _make_plots(title: str, rows: int, cols: int):
         figure=fig,
         left=0.05,
         right=0.95,
-        top=0.90,
+        top=0.9,
         bottom=0.1,
         wspace=0.25,
         hspace=0.5,
@@ -652,7 +652,7 @@ def analyze_data(file_paths: list[str]):
     notice.
 
     Args:
-        file_path: Path to the CSV file.
+        file_paths: Path to the CSV file.
 
     Returns:
         None.

@@ -39,7 +39,7 @@ def _make_plot():
         width_ratios=[1, 3],
         )
     try:
-        fig.canvas_manager.set_window_title("Trading Bot Classification")  # type: ignore
+        fig.canvas.manager.set_window_title("Trading Bot Classification")  # type: ignore
     except AttributeError:
         print("Warning: Unable to set window title; feature may be unsupported in this environment")
 
@@ -314,7 +314,6 @@ def classify_bots(data: pd.DataFrame) -> None:
 
     Args:
         data: DataFrame containing the trading data for classification.
-        clusters: The number of clusters to use for classification.
 
     Returns:
         None.

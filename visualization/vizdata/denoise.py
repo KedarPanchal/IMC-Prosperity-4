@@ -154,7 +154,6 @@ def haar_denoise(
     Args:
         passes: The number of times to apply the Haar transform; more passes
         result in stronger denoising.
-        Haar transform; the default is soft thresholding.
         args: Ignored; included for interface consistency with other denoising
         functions.
 
