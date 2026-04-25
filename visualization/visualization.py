@@ -13,7 +13,10 @@ def main():
     """Parse CLI paths and run ``analyze_data`` on each existing file."""
 
     # Create base parser containing shared logic across commands
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser(
+            add_help=True,
+            description="Visualize and analyze IMC Prosperity 4 data from CSV files."
+            )
     parser.add_argument(
             "--files",
             "-f",
