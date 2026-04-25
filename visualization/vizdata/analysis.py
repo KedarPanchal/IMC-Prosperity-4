@@ -2,7 +2,7 @@
 denoising.
 """
 
-from typing import Callable, Any
+from typing import Any
 from collections import defaultdict
 
 import re
@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
 import mplcursors
 
-from vizdata.denoise import DENOISING_STRATEGIES, not_identity
+from vizdata.denoise import DENOISING_STRATEGIES
 
 
 # -- PRIVATE HELPERS ----------------------------------------------------------
@@ -131,16 +131,36 @@ def _denoise_gui(fig, artists_list: list[list], raw_data_list: list[list]):
             labels=list(DENOISING_STRATEGIES.keys()),
             active=list(DENOISING_STRATEGIES.keys()).index("identity")
             )
+    passes = widgets.TextBox(
+            plt.axes((0.01, 0.35, 0.1, 0.04)),
+            label="",
+            initial="6",
+            )
+    alpha = widgets.TextBox(
+            plt.axes((0.01, 0.3, 0.1, 0.04)),
+            label="",
+            initial="0.5",
+            )
 
     def change_denoise(label):
-        denoiser = DENOISING_STRATEGIES[label](6, 0.7)
+        try:
+            passes_value = int(passes.text)
+            alpha_value = float(alpha.text)
+        except ValueError:
+            print("Invalid input for denoising passes and/or alpha; using default of 6 passes and 0.5 alpha")
+            passes_value = 6
+            alpha_value = 0.5
+
+        denoiser = DENOISING_STRATEGIES[label](passes_value, alpha_value)
         for artists, raw_data in zip(artists_list, raw_data_list):
             for artist, data in zip(artists, raw_data):
                 artist.set_ydata(denoiser(data))
         fig.canvas.draw_idle()
 
     button.on_clicked(change_denoise)
-    return button
+    passes.on_submit(change_denoise)
+
+    return button, passes, alpha
 
 
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
@@ -281,11 +301,7 @@ def _analyze_trade_data(
     plt.show()
 
 
-def _analyze_price_data(
-        data: pd.DataFrame,
-        alpha: float,
-        denoiser: Callable[[list[int | float]], list[int | float]]
-        ):
+def _analyze_price_data(data: pd.DataFrame):
     """Plot per-product bid/ask/fair price and volumes, plus combined price
     series.
 
@@ -305,9 +321,6 @@ def _analyze_price_data(
     if len(data) == 0:
         print("No price data found for analysis")
         return
-
-    # Check if denoising is actually being done
-    denoised = not_identity(denoiser)
 
     # Create a subplot for each price item
     # Rows 1-3 show price, bid volume, and ask volume data for each price item
@@ -374,7 +387,7 @@ def _analyze_price_data(
         _plot_data(
             axis=axes[0, plot],  # type: ignore
             axis_color="green",
-            title=f"Bid/Ask Prices{' (denoised)' if denoised else ''}",
+            title="Bid/Ask Prices",
             title_color="green",
             timestamps=bid_timestamps,
             data=bid_price_artists_data_raw[-1],
@@ -407,7 +420,7 @@ def _analyze_price_data(
         _plot_data(
             axis=axes[1, plot],  # type: ignore
             axis_color="blue",
-            title=f"Bid Volume{' (denoised)' if denoised else ''}",
+            title="Bid Volume",
             title_color="blue",
             timestamps=bid_timestamps,
             data=bid_quantity_artists_data_raw[-1],
@@ -421,7 +434,7 @@ def _analyze_price_data(
         _plot_data(
             axis=axes[2, plot],  # type: ignore
             axis_color="orange",
-            title=f"Ask Volume{' (denoised)' if denoised else ''}",
+            title="Ask Volume",
             title_color="orange",
             timestamps=ask_timestamps,
             data=ask_quantity_artists_data_raw[-1],
@@ -472,15 +485,15 @@ def _analyze_price_data(
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif label == "ask":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nFair Value: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -496,11 +509,11 @@ def _analyze_price_data(
         x, y = sel.target
         label = sel.artist.get_label()
         if label == "bid":
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume{' (denoised)' if denoised else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nBid Volume: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
         else:
-            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume{' (denoised)' if denoised else ''}: {int(y)}")
+            sel.annotation.set_text(f"Timestamp: {int(x)}\nAsk Volume: {int(y)}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
@@ -520,15 +533,15 @@ def _analyze_price_data(
         x, y = sel.target
         symbol, trade_type = sel.artist.get_label().split(' ', 1)
         if trade_type == "bid":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nBid Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
         elif trade_type == "ask":
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nAsk Price: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightcoral")
         else:
-            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value{' (denoised)' if denoised else ''}: {float(y):.2f}")
+            sel.annotation.set_text(f"Item: {symbol}\nTimestamp: {int(x)}\nFair Value: {float(y):.2f}")
             sel.annotation.get_bbox_patch().set_alpha(0.9)
             sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -564,24 +577,16 @@ def _analyze_price_data(
 
 # -- MAIN ANALYSIS FUNCTION ---------------------------------------------------
 
-def analyze_data(
-        file_paths: list[str],
-        strategy: str,
-        passes: int,
-        alpha: float
-        ):
+def analyze_data(file_paths: list[str]):
     """Load a semicolon-separated CSV and dispatch to trade or price
     visualization.
 
     Chooses ``analyze_trade_data`` if a ``buyer`` column exists,
     ``analyze_price_data`` if ``profit_and_loss`` exists; otherwise prints a
     notice.
-    Applies the appropriate denoising strategy if specified.
 
     Args:
         file_path: Path to the CSV file.
-        strategy: The name of the denoising strategy to utilize
-        passes: The number of denoising passes to make
 
     Returns:
         None.
@@ -604,20 +609,13 @@ def analyze_data(
         else:
             print(f"Warning: File {file_path} is not a valid trade or price data file")
 
-    # Determine the appropriate denoising function based on the strategy
-    try:
-        denoise = DENOISING_STRATEGIES[strategy](passes, alpha)
-    except ValueError as e:
-        print(f"Error: {e}. Defaulting to no denoising.")
-        denoise = DENOISING_STRATEGIES["identity"](passes, alpha)
-
     if len(trade_paths) > 0:
         trade_data = _collate(trade_paths)
         _analyze_trade_data(trade_data)
 
     if len(price_paths) > 0:
         price_data = _collate(price_paths)
-        _analyze_price_data(price_data, alpha, denoise)
+        _analyze_price_data(price_data)
 
     if len(trade_paths) == 0 and len(price_paths) == 0:
         print("No valid trade or price data found for analysis")

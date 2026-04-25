@@ -4,7 +4,6 @@ import argparse
 import os
 
 from vizdata.analysis import analyze_data
-from vizdata.denoise import DENOISING_STRATEGIES
 from vizdata.botclassifier import collate_data, classify_bots
 
 
@@ -34,30 +33,6 @@ def main():
             parents=[base_parser],
             help="Perform visualization with optional data denoising"
             )
-    analysis_parser.add_argument(
-        "--strategy",
-        "-s",
-        dest="strategy",
-        choices=list(DENOISING_STRATEGIES.keys()),
-        default="identity",
-        help="Which denoising algorithm to utilize when denoising the data"
-        )
-    analysis_parser.add_argument(
-        "--passes",
-        "-p",
-        dest="passes",
-        type=int,
-        default=2,
-        help="The number of denoising passes to perform"
-        )
-    analysis_parser.add_argument(
-        "--alpha",
-        "-a",
-        dest="alpha",
-        type=float,
-        default=0.5,
-        help="The alpha value to compute the exponential moving average for the EMA denoising strategy"
-        )
 
     classification_parser = subparser.add_parser(
         "classification",
@@ -87,12 +62,7 @@ def main():
             parser.error(f"Unknown file: {file}")
 
     if args.command == "analysis":
-        analyze_data(
-            files,
-            args.strategy,
-            args.passes,
-            args.alpha
-            )
+        analyze_data(files)
     elif args.command == "classification":
         # Placeholder for classification logic
         data = collate_data(files)
