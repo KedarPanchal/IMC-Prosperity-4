@@ -36,8 +36,8 @@ def _plot_isolation_data(
         seed: The random seed to use for the isolation forest.
 
     Returns:
-        The fitted IsolationForest model, the scatter plot object, the colormap
-        used for plotting, and the fitted PCA model.
+        The fitted IsolationForest model, the scatter plot object, and the
+        fitted PCA model.
     """
     # Perform isolation forest outlier detection
     isolation = IsolationForest(
