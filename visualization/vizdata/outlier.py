@@ -59,7 +59,7 @@ def _plot_isolation_data(
         labels = labels[labels != -1]
 
     # Plot the data points
-    colormap = plt.get_cmap("coolwarm", 2)
+    colormap = plt.get_cmap("coolwarm_r", 2)
     isolation_scatter = isolation_axes.scatter(
             pca_features[:, 0],
             pca_features[:, 1],
