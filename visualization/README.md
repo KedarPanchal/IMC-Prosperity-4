@@ -64,7 +64,7 @@ uv run visualization.py -f <file1.csv> [file2.csv ...] -m <mode>
 ```
 
 - **`-f` / `--files`** — one or more CSV paths to load (required)
-- **`-m` / `--mode`** — what to do with the data: `analysis` (default) or `classification`
+- **`-m` / `--mode`** — what to do with the data: `analysis` (default), `classification`, or `outlier`
 
 ### File naming requirements
 
@@ -222,6 +222,73 @@ Below the controls, two colored info boxes show what metrics contribute most to 
 - **PCA Component 2** (green box) — the secondary axis.
 
 Each metric is listed with its percentage contribution. This helps you understand what the x/y axes actually mean (e.g., "Component 1 is mostly total volume and number of trades").
+
+---
+
+## Mode: `outlier` — unusual market moment detection
+
+Scans the data for time windows that behaved unusually compared to everything else — spikes, lulls, or anything the model considers anomalous. Great for quickly spotting moments worth investigating further.
+
+### File requirements
+
+Outlier detection uses the same files as classification — you need **both** trade files and price files for **the same set of days**:
+
+- Trade filenames must contain the word **`trades`** somewhere in the name.
+- Price filenames must contain the word **`prices`** somewhere in the name.
+- Both must include a `day_#` marker.
+
+```bash
+uv run visualization.py -f path/to/trades_day_0.csv path/to/prices_day_0.csv -m outlier
+```
+
+### What you see in the chart
+
+The outlier window has **two panels**:
+
+**Top panel — PCA scatter plot:**
+Each dot is a 2-second time window, laid out in 2D space (PCA) so that similar windows end up close together. Points are colored by whether the model considers them **inliers** (blue, normal) or **outliers** (red, unusual).
+
+**Bottom panel — Decision score chart:**
+The same time windows sorted by their "outlier score" — a measure of how isolated (i.e. unusual) each window is. Points that score below zero are considered outliers; above zero are inliers. The lower the score, the more anomalous the window.
+
+Hovering over a dot in either panel shows a tooltip with the time window's start timestamp, its key market metrics, and its outlier score.
+
+### Left-side control panel (outlier mode)
+
+#### Number of Trees (text box)
+
+Controls how many decision trees the Isolation Forest algorithm uses internally. Default is **100**.
+
+- Type a number and press **Enter** to recompute.
+- Higher values → more stable, consistent results, but slower to compute.
+- Lower values → faster, but results may vary slightly between runs.
+
+#### Random Seed (text box)
+
+Makes results reproducible. Default is **0**.
+
+- Type any non-negative integer and press **Enter** to recompute.
+- Changing the seed with the same tree count will sometimes give slightly different outlier assignments.
+
+#### Inlier / Outlier checkboxes
+
+Two checkboxes let you show or hide each category of points:
+
+| Checkbox | What it shows |
+|---|---|
+| **Inlier** | Normal time windows (blue dots) |
+| **Outlier** | Anomalous time windows (red dots) |
+
+Both are checked by default. Unchecking **Inlier** leaves only the flagged outliers visible — useful when you want to focus on just the unusual moments without the noise of normal data.
+
+#### PCA Component breakdown
+
+Below the controls, two colored info boxes explain what each axis of the scatter plot actually represents:
+
+- **PCA Component 1** (blue box) — the main axis of variation across all windows.
+- **PCA Component 2** (green box) — the secondary axis.
+
+Each metric is listed with its percentage contribution, so you can tell at a glance what drove the separation (e.g., "Component 1 is mostly total volume and number of trades").
 
 ---
 
