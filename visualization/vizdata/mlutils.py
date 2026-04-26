@@ -70,7 +70,7 @@ def pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
             )
     pca1_text = control_axes.text(
         0.05,
-        0.85,
+        0.75,
         "PCA Component 1 Composition:\n\n" +
         '\n'.join(f"{col}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
@@ -80,7 +80,7 @@ def pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
         )
     pca2_text = control_axes.text(
         0.05,
-        0.40,
+        0.35,
         "PCA Component 2 Composition:\n\n" +
         '\n'.join(f"{col}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),

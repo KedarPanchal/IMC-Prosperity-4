@@ -22,7 +22,9 @@ def _plot_isolation_data(
         isolation_axes: Axes,
         data: np.ndarray,
         tree_count: int,
-        seed: int
+        seed: int,
+        enable_inliers: bool = True,
+        enable_outliers: bool = True
         ):
     """Plot the data points in a 2D PCA space, colored by their isolation 
     forest labels.
@@ -49,6 +51,13 @@ def _plot_isolation_data(
     pca = PCA(n_components=2, svd_solver="full")
     pca_features = pca.fit_transform(data)
 
+    if not enable_inliers:
+        pca_features = pca_features[labels != 1]
+        labels = labels[labels != 1]
+    if not enable_outliers:
+        pca_features = pca_features[labels != -1]
+        labels = labels[labels != -1]
+
     # Plot the data points
     colormap = plt.get_cmap("coolwarm", 2)
     isolation_scatter = isolation_axes.scatter(
@@ -64,7 +73,7 @@ def _plot_isolation_data(
     isolation_axes.set_xlabel("PCA Component 1")
     isolation_axes.set_ylabel("PCA Component 2")
 
-    return isolation, isolation_scatter, colormap, pca
+    return isolation, isolation_scatter, pca
 
 
 def _plot_decision_data(
@@ -132,7 +141,7 @@ def _outliers_gui(
         updated mplcursors.Cursor objects for the isolation and decision score
         plots.
     """
-    tree_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
+    tree_axes = control_axes.inset_axes((0.46, 0.95, 0.56, 0.04))
     tree_label = widgets.TextBox(
         tree_axes,
         label="Number of Trees: ",
@@ -143,6 +152,12 @@ def _outliers_gui(
         seed_axes,
         label="Random Seed: ",
         initial="0"
+        )
+    enable_axes = control_axes.inset_axes((0.05, 0.8, 0.62, 0.07))
+    enable = widgets.CheckButtons(
+        enable_axes,
+        labels=["Inlier", "Outlier"],
+        actives=[True, True]
         )
 
     def change_isolation(label):
@@ -162,34 +177,52 @@ def _outliers_gui(
             tree_count = 100
             seed = 0
 
-        isolation, isolation_scatter, isolation_colormap, *_ = _plot_isolation_data(
+        # Rebuild the isolation forest and decision score plots
+        isolation, isolation_scatter, *_ = _plot_isolation_data(
             isolation_axes,
             data,
             tree_count=tree_count,
-            seed=seed
+            seed=seed,
+            enable_inliers=enable.get_status()[0],
+            enable_outliers=enable.get_status()[1]
             )
-        decision_scores, _ = _plot_decision_data(
+        decision_scores, decision_graph = _plot_decision_data(
             isolation,
             decision_axes,
             data
             )
+
+        # Filter data and decision scores based on inliers/outliers checkboxes
+        filtered_data = data
+        filtered_decision_scores = decision_scores
+        if not enable.get_status()[0]:
+            filtered_data = filtered_data[decision_scores < 0]
+            filtered_decision_scores = filtered_decision_scores[decision_scores < 0]
+        if not enable.get_status()[1]:
+            filtered_data = filtered_data[decision_scores >= 0]
+            filtered_decision_scores = filtered_decision_scores[decision_scores >= 0]
+
         # Rebuild the cursors, too
         isolation_cursor.remove()
         decision_cursor.remove()
         isolation_cursor = _build_isolation_cursor(
             isolation_scatter,
             df,
-            data,
+            filtered_data,
             isolation,
-            decision_scores,
-            isolation_colormap
+            filtered_decision_scores,
+            )
+        decision_cursor = _build_decision_cursor(
+            decision_graph,
+            decision_scores
             )
         fig.canvas.draw_idle()
 
     tree_label.on_submit(change_isolation)
     seed_label.on_submit(change_isolation)
+    enable.on_clicked(change_isolation)
 
-    return tree_label, seed_label, isolation_cursor, decision_cursor
+    return tree_label, seed_label, enable, isolation_cursor, decision_cursor
 
 
 def _build_isolation_cursor(
@@ -198,7 +231,6 @@ def _build_isolation_cursor(
         scaled: np.ndarray,
         isolation: IsolationForest,
         decision_scores: np.ndarray,
-        isolation_colormap
         ):
     isolation_cursor = mplcursors.cursor(isolation_scatter, hover=mplcursors.HoverMode.Transient)
 
@@ -216,7 +248,7 @@ def _build_isolation_cursor(
             )
         sel.annotation.get_bbox_patch().set_alpha(0.95)
         sel.annotation.get_bbox_patch().set_facecolor(
-            isolation_colormap(isolation.predict(scaled)[index])  # type: ignore
+            "darkred" if decision_scores[index] < 0 else "darkblue"
             )
 
     return isolation_cursor
@@ -234,7 +266,9 @@ def _build_decision_cursor(decision_graph, decision_scores: np.ndarray):
             f"Outlier Score: {sorted_decision_scores[index]:.4f}"  # type: ignore
             )
         sel.annotation.get_bbox_patch().set_alpha(0.95)
-        sel.annotation.get_bbox_patch().set_facecolor("red" if sorted_decision_scores[index] < 0 else "green")  # type: ignore
+        sel.annotation.get_bbox_patch().set_facecolor(
+            "darkred" if sorted_decision_scores[index] < 0 else "darkblue"
+            )
 
     return decision_cursor
 
@@ -245,7 +279,7 @@ def detect_outliers(data: pd.DataFrame):
     # Preprocess the data
     features, scaled = preprocess_data(data)
     fig, (isolation_axes, split_axes), control_axes = make_plot("Outlier Detection", 2)
-    isolation, isolation_scatter, isolation_colormap, pca = _plot_isolation_data(
+    isolation, isolation_scatter, pca = _plot_isolation_data(
         isolation_axes,
         scaled,
         tree_count=100,
@@ -264,7 +298,6 @@ def detect_outliers(data: pd.DataFrame):
         scaled,
         isolation,
         decision_scores,
-        isolation_colormap
         )
     decision_cursor = _build_decision_cursor(decision_graph, decision_scores)
     # Show the GUI for adjusting isolation forest parameters
