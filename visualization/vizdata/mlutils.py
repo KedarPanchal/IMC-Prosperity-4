@@ -229,7 +229,6 @@ def preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
 
     Returns:
         A tuple containing the following elements:
-        - A DataFrame with the original data (with timestamp columns dropped).
         - A DataFrame with the engineered features (after 1-hot encoding).
         - A NumPy array containing the normalized feature values.
     """
