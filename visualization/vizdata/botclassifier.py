@@ -64,8 +64,10 @@ def _plot_data(data_axes: Axes, data: np.ndarray, k: int, seed: int):
 def _kmeans_gui(
         fig: Figure,
         data: np.ndarray,
+        df: pd.DataFrame,
         control_axes: Axes,
-        data_axes: Axes
+        data_axes: Axes,
+        cursor: mplcursors.Cursor
         ):
     """Create a GUI for adjusting the number of clusters (k) and random seed
     for k-means clustering.
@@ -81,6 +83,7 @@ def _kmeans_gui(
         The TextBox widgets for k and random seed since matplotlib requires
         keeping references to them to prevent garbage collection.
     """
+    # Render GUI compnents
     k_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
     k_label = widgets.TextBox(
         k_axes,
@@ -94,7 +97,10 @@ def _kmeans_gui(
         initial="0"
         )
 
+    # Update the plot when the user submits new values for k or random seed
     def change_kmeans(label):
+        nonlocal cursor
+
         try:
             k = int(k_label.text)
             seed = int(seed_label.text)
@@ -109,13 +115,39 @@ def _kmeans_gui(
             k = 10
             seed = 0
 
-        _plot_data(data_axes, data, k, seed)
+        kmeans, scatter, colormap = _plot_data(data_axes, data, k, seed)
+        # Rebuild the cursor, too
+        cursor.remove()
+        cursor = _build_cursor(scatter, df, kmeans, colormap)
         fig.canvas.draw_idle()
 
     k_label.on_submit(change_kmeans)
     seed_label.on_submit(change_kmeans)
 
-    return k_label, seed_label
+    return k_label, seed_label, cursor
+
+
+def _build_cursor(plot, data: pd.DataFrame, kmeans: KMeans, colormap):
+    cursor = mplcursors.cursor(plot, hover=mplcursors.HoverMode.Transient)
+
+    @cursor.connect("add")
+    def on_add(sel):
+        index = sel.index
+
+        local_data = data.iloc[[index]]
+        numeric_columns = local_data.select_dtypes(include='number').columns
+        local_data[numeric_columns] = local_data[numeric_columns].round(4)
+        sel.annotation.set_text(
+            f"Start Timestamp: {local_data.index[0]}\n" +
+            '\n'.join(f"{COL_NAMES.get(col, col)}: {local_data[col].iloc[0]}" for col in data.columns) +
+            f"\nCluster: {kmeans.labels_[index]}"  # type: ignore
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.95)
+        sel.annotation.get_bbox_patch().set_facecolor(
+            colormap(kmeans.labels_[index])  # type: ignore
+            )
+
+    return cursor
 
 
 # -- MAIN LOGIC ---------------------------------------------------------------
@@ -144,28 +176,11 @@ def classify_bots(data: pd.DataFrame) -> None:
     kmeans, scatter, colormap = _plot_data(axes, pca_features, 10, seed=0)
 
     # Create cursor for hover annotations
-    cursor = mplcursors.cursor(scatter, hover=mplcursors.HoverMode.Transient)
-
-    @cursor.connect("add")
-    def on_add(sel):
-        index = sel.index
-
-        local_data = data.iloc[[index]]
-        numeric_columns = local_data.select_dtypes(include='number').columns
-        local_data[numeric_columns] = local_data[numeric_columns].round(4)
-        sel.annotation.set_text(
-            f"Start Timestamp: {local_data.index[0]}\n" +
-            '\n'.join(f"{COL_NAMES.get(col, col)}: {local_data[col].iloc[0]}" for col in dropped.columns) +
-            f"\nCluster: {kmeans.labels_[index]}"  # type: ignore
-            )
-        sel.annotation.get_bbox_patch().set_alpha(0.95)
-        sel.annotation.get_bbox_patch().set_facecolor(
-            colormap(kmeans.labels_[index])  # type: ignore
-            )
+    cursor = _build_cursor(scatter, data, kmeans, colormap)
 
     # Show the GUI for adjusting k and random seed
     # Also show the PCA component contributions
-    _ = _kmeans_gui(fig, pca_features, control_axes, axes)
+    *_, cursor = _kmeans_gui(fig, pca_features, data, control_axes, axes, cursor)
     pca_contributions(pca, features, control_axes)
     # Actually plot the clusters
     plt.show()
