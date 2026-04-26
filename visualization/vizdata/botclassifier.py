@@ -165,7 +165,7 @@ def classify_bots(data: pd.DataFrame) -> None:
         None.
     """
     # Preprocess data and perform PCA
-    dropped, features, scaled = preprocess_data(data)
+    features, scaled = preprocess_data(data)
     pca = PCA(n_components=2, svd_solver="full")
     pca_features = pca.fit_transform(scaled)
 

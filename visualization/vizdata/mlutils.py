@@ -220,7 +220,7 @@ def collate_data(files: list[str]) -> pd.DataFrame | None:
     return final_dataframe.set_index("timestamp_start")
 
 
-def preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
+def preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
     """Preprocess the data for machine learning by performing feature
     engineering and normalization.
 
@@ -242,7 +242,7 @@ def preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.
     features = pd.get_dummies(dropped, columns=["symbol"], drop_first=True)
     # Normalize the features
     scaler = StandardScaler()
-    return dropped, features, scaler.fit_transform(features)
+    return features, scaler.fit_transform(features)
 
 
 # -- GLOBAL CONSTANTS ---------------------------------------------------------

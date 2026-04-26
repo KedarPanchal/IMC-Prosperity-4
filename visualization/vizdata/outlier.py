@@ -101,9 +101,12 @@ def _plot_decision_data(
 def _outliers_gui(
         fig: Figure,
         data: np.ndarray,
+        df: pd.DataFrame,
         isolation_axes: Axes,
         decision_axes: Axes,
         control_axes: Axes,
+        isolation_cursor: mplcursors.Cursor,
+        decision_cursor: mplcursors.Cursor
         ):
     tree_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
     tree_label = widgets.TextBox(
@@ -119,6 +122,8 @@ def _outliers_gui(
         )
 
     def change_isolation(label):
+        nonlocal isolation_cursor, decision_cursor
+
         try:
             tree_count = int(tree_label.text)
             seed = int(seed_label.text)
@@ -133,30 +138,88 @@ def _outliers_gui(
             tree_count = 100
             seed = 0
 
-        isolation, *_ = _plot_isolation_data(
+        isolation, isolation_scatter, isolation_colormap, *_ = _plot_isolation_data(
             isolation_axes,
             data,
             tree_count=tree_count,
             seed=seed
             )
-        _plot_decision_data(
+        decision_scores, decision_graph = _plot_decision_data(
             isolation,
             decision_axes,
             data
+            )
+        # Rebuild the cursors, too
+        isolation_cursor.remove()
+        decision_cursor.remove()
+        isolation_cursor = _build_isolation_cursor(
+            isolation_scatter,
+            df,
+            data,
+            isolation,
+            decision_scores,
+            isolation_colormap
             )
         fig.canvas.draw_idle()
 
     tree_label.on_submit(change_isolation)
     seed_label.on_submit(change_isolation)
 
-    return tree_label, seed_label
+    return tree_label, seed_label, isolation_cursor, decision_cursor
+
+
+def _build_isolation_cursor(
+        isolation_scatter,
+        data: pd.DataFrame,
+        scaled: np.ndarray,
+        isolation: IsolationForest,
+        decision_scores: np.ndarray,
+        isolation_colormap
+        ):
+    isolation_cursor = mplcursors.cursor(isolation_scatter, hover=mplcursors.HoverMode.Transient)
+
+    @isolation_cursor.connect("add")
+    def on_isolation_add(sel):
+        index = sel.index
+
+        local_data = data.iloc[[index]]
+        numeric_columns = local_data.select_dtypes(include=[np.number]).columns
+        local_data[numeric_columns] = local_data[numeric_columns].round(4)
+        sel.annotation.set_text(
+            f"Start Timestamp: {local_data.index[0]}\n" +
+            '\n'.join(f"{COL_NAMES.get(col, col)}: {local_data[col].iloc[0]}" for col in data.columns) +
+            f"\nOutlier Score: {decision_scores[index]:.4f}"  # type: ignore
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.95)
+        sel.annotation.get_bbox_patch().set_facecolor(
+            isolation_colormap(isolation.predict(scaled)[index])  # type: ignore
+            )
+
+    return isolation_cursor
+
+
+def _build_decision_cursor(decision_graph, decision_scores: np.ndarray):
+    sorted_decision_scores = sorted(decision_scores)
+    decision_cursor = mplcursors.cursor(decision_graph, hover=mplcursors.HoverMode.Transient)
+
+    @decision_cursor.connect("add")
+    def on_decision_add(sel):
+        index = int(sel.index)
+
+        sel.annotation.set_text(
+            f"Outlier Score: {sorted_decision_scores[index]:.4f}"  # type: ignore
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.95)
+        sel.annotation.get_bbox_patch().set_facecolor("red" if sorted_decision_scores[index] < 0 else "green")  # type: ignore
+
+    return decision_cursor
 
 
 # -- MAIN LOGIC ---------------------------------------------------------------
 
 def detect_outliers(data: pd.DataFrame):
     # Preprocess the data
-    dropped, features, scaled = preprocess_data(data)
+    features, scaled = preprocess_data(data)
     fig, (isolation_axes, split_axes), control_axes = make_plot("Outlier Detection", 2)
     isolation, isolation_scatter, isolation_colormap, pca = _plot_isolation_data(
         isolation_axes,
@@ -171,41 +234,27 @@ def detect_outliers(data: pd.DataFrame):
         )
 
     # Create cursor for hover annotations
-    isolation_cursor = mplcursors.cursor(isolation_scatter, hover=mplcursors.HoverMode.Transient)
-
-    @isolation_cursor.connect("add")
-    def on_isolation_add(sel):
-        index = sel.index
-
-        local_data = data.iloc[[index]]
-        numeric_columns = local_data.select_dtypes(include=[np.number]).columns
-        local_data[numeric_columns] = local_data[numeric_columns].round(4)
-        sel.annotation.set_text(
-            f"Start Timestamp: {local_data.index[0]}\n" +
-            '\n'.join(f"{COL_NAMES.get(col, col)}: {local_data[col].iloc[0]}" for col in dropped.columns) +
-            f"\nOutlier Score: {decision_scores[index]:.4f}"  # type: ignore
-            )
-        sel.annotation.get_bbox_patch().set_alpha(0.95)
-        sel.annotation.get_bbox_patch().set_facecolor(
-            isolation_colormap(isolation.predict(scaled)[index])  # type: ignore
-            )
-
-    sorted_decision_scores = sorted(decision_scores)
-    decision_cursor = mplcursors.cursor(decision_graph, hover=mplcursors.HoverMode.Transient)
-
-    @decision_cursor.connect("add")
-    def on_decision_add(sel):
-        index = int(sel.index)
-
-        sel.annotation.set_text(
-            f"Outlier Score: {sorted_decision_scores[index]:.4f}"  # type: ignore
-            )
-        sel.annotation.get_bbox_patch().set_alpha(0.95)
-        sel.annotation.get_bbox_patch().set_facecolor("red" if sorted_decision_scores[index] < 0 else "green")  # type: ignore
-
+    isolation_cursor = _build_isolation_cursor(
+        isolation_scatter,
+        data,
+        scaled,
+        isolation,
+        decision_scores,
+        isolation_colormap
+        )
+    decision_cursor = _build_decision_cursor(decision_graph, decision_scores)
     # Show the GUI for adjusting isolation forest parameters
     # Also show the PCA component contributions
-    _ = _outliers_gui(fig, scaled, isolation_axes, split_axes, control_axes)
+    *_, isolation_cursor, decision_cursor = _outliers_gui(
+        fig,
+        scaled,
+        data,
+        isolation_axes,
+        split_axes,
+        control_axes,
+        isolation_cursor,
+        decision_cursor
+        )
     pca_contributions(pca, features, control_axes)
     # Actually plot the outliers
     plt.show()
