@@ -75,13 +75,19 @@ def _kmeans_gui(
     Args:
         fig: The figure to add the GUI to.
         data: The PCA-transformed data to plot.
+        df: The original DataFrame containing the trading data, used for hover
+        annotations.
         control_axes: The axes to add the GUI controls to.
         data_axes: The axes to update with the new clustering results when the
         controls are adjusted.
+        cursor: The mplcursors.Cursor object to update with the new clustering
+        results when the controls are adjusted.
 
     Returns:
         The TextBox widgets for k and random seed since matplotlib requires
         keeping references to them to prevent garbage collection.
+        Also returns the updated cursor object after adjusting the clustering
+        results.
     """
     # Render GUI compnents
     k_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
@@ -128,6 +134,21 @@ def _kmeans_gui(
 
 
 def _build_cursor(plot, data: pd.DataFrame, kmeans: KMeans, colormap):
+    """Build a cursor for the scatter plot that shows detailed information
+    about each point when hovered over.
+
+    Args:
+        plot: The scatter plot to attach the cursor to.
+        data: The original DataFrame containing the trading data, used to
+        display detailed information in the hover annotations.
+        kmeans: The fitted KMeans model, used to display the cluster label in
+        the hover annotations.
+        colormap: The colormap used for plotting, used to set the background
+        color of the hover annotations based on the cluster label.
+
+    Returns:
+        The created mplcursors.Cursor object.
+    """
     cursor = mplcursors.cursor(plot, hover=mplcursors.HoverMode.Transient)
 
     @cursor.connect("add")

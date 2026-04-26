@@ -108,6 +108,30 @@ def _outliers_gui(
         isolation_cursor: mplcursors.Cursor,
         decision_cursor: mplcursors.Cursor
         ):
+    """Create a GUI for adjusting the number of trees and random seed for the
+    isolation forest, and update the plots accordingly.
+
+    Args:
+        fig: The figure to add the GUI to.
+        data: The preprocessed data to plot.
+        df: The original DataFrame containing the data (for annotations).
+        isolation_axes: The axes to update with the new isolation forest
+        results when the controls are adjusted.
+        decision_axes: The axes to update with the new decision scores when the
+        controls are adjusted.
+        control_axes: The axes to add the GUI controls to.
+        isolation_cursor: The mplcursors.Cursor object for the isolation plot,
+        to update with the new isolation forest results when the controls are
+        adjusted.
+        decision_cursor: The mplcursors.Cursor object for the decision score
+        plot, to update with the new decision scores when the controls are
+        adjusted.
+
+    Returns:
+        The TextBox widgets for the number of trees and random seed, and the
+        updated mplcursors.Cursor objects for the isolation and decision score
+        plots.
+    """
     tree_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
     tree_label = widgets.TextBox(
         tree_axes,
@@ -144,7 +168,7 @@ def _outliers_gui(
             tree_count=tree_count,
             seed=seed
             )
-        decision_scores, decision_graph = _plot_decision_data(
+        decision_scores, _ = _plot_decision_data(
             isolation,
             decision_axes,
             data
