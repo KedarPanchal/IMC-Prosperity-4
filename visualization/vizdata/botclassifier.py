@@ -89,7 +89,7 @@ def _kmeans_gui(
         Also returns the updated cursor object after adjusting the clustering
         results.
     """
-    # Render GUI compnents
+    # Render GUI components
     k_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
     k_label = widgets.TextBox(
         k_axes,
