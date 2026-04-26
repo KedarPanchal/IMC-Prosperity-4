@@ -251,7 +251,7 @@ Each dot is a 2-second time window, laid out in 2D space (PCA) so that similar w
 **Bottom panel — Decision score chart:**
 The same time windows sorted by their "outlier score" — a measure of how isolated (i.e. unusual) each window is. Points that score below zero are considered outliers; above zero are inliers. The lower the score, the more anomalous the window.
 
-Hovering over a dot in either panel shows a tooltip with the time window's start timestamp, its key market metrics, and its outlier score.
+Hovering over a dot in the **top PCA panel** shows a tooltip with the time window's start timestamp, its key market metrics, and its outlier score. Hovering over a dot in the **bottom decision score panel** shows that window's outlier score.
 
 ### Left-side control panel (outlier mode)
 
