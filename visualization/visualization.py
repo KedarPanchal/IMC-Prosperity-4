@@ -33,7 +33,7 @@ def main():
             choices=["analysis", "classification", "outlier"],
             default="analysis",
             help="Mode of operation: 'analysis' (default) for visualization, "
-                    "'classification' for bot detection"
+                    "'classification' for bot detection, "
                     "'outlier' for outlier detection"
             )
     args = parser.parse_args()
