@@ -199,7 +199,7 @@ def _denoise_gui(fig: Figure, axes: Axes, artists_list: list[list], raw_data_lis
             passes_value = 6
             alpha_value = 0.5
         try:
-            denoiser = DENOISING_STRATEGIES[label](passes_value, alpha_value)
+            denoiser = DENOISING_STRATEGIES[button.value_selected](passes_value, alpha_value)
             for artists, raw_data in zip(artists_list, raw_data_list):
                 for artist, data in zip(artists, raw_data):
                     artist.set_ydata(denoiser(data))
@@ -305,13 +305,13 @@ def _plot_selection_gui(
             ax_master.legend()
             fig.canvas.draw_idle()
         else:
-            # Store old queue and reset to trigger base case on the next toggle
-            old = plot_selection_queue.copy()
-            plot_selection_queue.clear()
+            # Push to queue to trigger base case
+            # Push the null terminator because no item will have this label
+            plot_selection_queue.append('\0')
             # Re-enable the checkbox for the removed item since we shouldn't directly deselect an already checked item
             plot_selection_checkbox.set_active(sorted_set.index(label), state=True)
             # Restore queue to original state
-            plot_selection_queue.extend(old)
+            plot_selection_queue.remove('\0')
 
     plot_selection_checkbox.on_clicked(toggle_plot)
     return plot_selection_checkbox

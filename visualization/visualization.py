@@ -4,7 +4,9 @@ import argparse
 import os
 
 from vizdata.analysis import analyze_data
-from vizdata.botclassifier import collate_data, classify_bots
+from vizdata.mlutils import collate_data
+from vizdata.botclassifier import classify_bots
+from vizdata.outlier import detect_outliers
 
 
 # -- CLI ----------------------------------------------------------------------
@@ -28,9 +30,11 @@ def main():
             "--mode",
             "-m",
             dest="mode",
-            choices=["analysis", "classification"],
+            choices=["analysis", "classification", "outlier"],
             default="analysis",
-            help="Mode of operation: 'analysis' for visualization, 'classification' for bot classification"
+            help="Mode of operation: 'analysis' (default) for visualization, "
+                    "'classification' for bot detection, "
+                    "'outlier' for outlier detection"
             )
     args = parser.parse_args()
 
@@ -44,9 +48,9 @@ def main():
             files.append(file)
         else:
             if os.path.isfile(file):
-                parser.error(f"File is not a CSV: {file}")
+                print(f"File is not a CSV, skipping: {file}")
             else:
-                parser.error(f"Unknown file: {file}")
+                print(f"Unknown file, skipping: {file}")
 
     if args.mode == "analysis":
         analyze_data(files)
@@ -56,6 +60,13 @@ def main():
         if data is None:
             parser.error("No valid data for classification")
         classify_bots(data)
+    elif args.mode == "outlier":
+        data = collate_data(files)
+        if data is None:
+            parser.error("No valid data for outlier detection")
+        detect_outliers(data)
+    else:
+        parser.error(f"Unknown mode: {args.mode}")
 
 
 if __name__ == "__main__":
