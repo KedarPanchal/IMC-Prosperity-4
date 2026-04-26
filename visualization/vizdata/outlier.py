@@ -193,13 +193,13 @@ def _outliers_gui(
             )
 
         # Filter data and decision scores based on inliers/outliers checkboxes
-        filtered_data = data
+        filtered_df = df.copy()
         filtered_decision_scores = decision_scores
         if not enable.get_status()[0]:
-            filtered_data = filtered_data[decision_scores < 0]
+            filtered_df = filtered_df[decision_scores < 0]
             filtered_decision_scores = filtered_decision_scores[decision_scores < 0]
         if not enable.get_status()[1]:
-            filtered_data = filtered_data[decision_scores >= 0]
+            filtered_df = filtered_df[decision_scores >= 0]
             filtered_decision_scores = filtered_decision_scores[decision_scores >= 0]
 
         # Rebuild the cursors, too
@@ -207,9 +207,7 @@ def _outliers_gui(
         decision_cursor.remove()
         isolation_cursor = _build_isolation_cursor(
             isolation_scatter,
-            df,
-            filtered_data,
-            isolation,
+            filtered_df,  # type: ignore
             filtered_decision_scores,
             )
         decision_cursor = _build_decision_cursor(
@@ -228,10 +226,23 @@ def _outliers_gui(
 def _build_isolation_cursor(
         isolation_scatter,
         data: pd.DataFrame,
-        scaled: np.ndarray,
-        isolation: IsolationForest,
         decision_scores: np.ndarray,
         ):
+    """Build a cursor for the isolation forest scatter plot that shows detailed
+    information about each point when hovered over, including the original data
+    values and the isolation forest decision score.
+
+    Args:
+        isolation_scatter: The scatter plot to attach the cursor to.
+        data: The original DataFrame containing the trading data, used to
+        display detailed information in the hover annotations.
+        decision_scores: The isolation forest decision scores for each data
+        point, used to display the outlier score in the hover annotations and
+        set the background color.
+
+    Returns:
+        The created mplcursors.Cursor object.
+    """
     isolation_cursor = mplcursors.cursor(isolation_scatter, hover=mplcursors.HoverMode.Transient)
 
     @isolation_cursor.connect("add")
@@ -255,6 +266,18 @@ def _build_isolation_cursor(
 
 
 def _build_decision_cursor(decision_graph, decision_scores: np.ndarray):
+    """Build a cursor for the isolation forest decision score plot that shows
+    the decision score for each point when hovered over.
+
+    Args:
+        decision_graph: The line plot to attach the cursor to.
+        decision_scores: The isolation forest decision scores for each data
+        point, used to display the outlier score in the hover annotations and
+        set the background color.
+
+    Returns:
+        The created mplcursors.Cursor object.
+    """
     sorted_decision_scores = sorted(decision_scores)
     decision_cursor = mplcursors.cursor(decision_graph, hover=mplcursors.HoverMode.Transient)
 
@@ -295,8 +318,6 @@ def detect_outliers(data: pd.DataFrame):
     isolation_cursor = _build_isolation_cursor(
         isolation_scatter,
         data,
-        scaled,
-        isolation,
         decision_scores,
         )
     decision_cursor = _build_decision_cursor(decision_graph, decision_scores)
