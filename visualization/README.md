@@ -173,7 +173,7 @@ The price/orderbook window also has checkboxes to toggle individual series on an
 
 ## Mode: `trade-classification` — clustering and outlier detection in one view
 
-Analyzes your trade and price data together to find patterns and flag unusual moments. It opens a single window with **two panels side by side**: one for grouping similar market behaviors (clustering), and one for spotting anomalies (outlier detection). Both panels work in the same 2D PCA space, so you can compare them directly.
+Analyzes your trade and price data together to find patterns and flag unusual moments. It opens a single window with **two vertically stacked panels**: one for grouping similar market behaviors (clustering), and one for spotting anomalies (outlier detection). Both panels work in the same 2D PCA space, so you can compare them directly.
 
 ### File requirements
 
