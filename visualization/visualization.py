@@ -4,9 +4,6 @@ import argparse
 import os
 
 from vizdata.analysis import analyze_data
-from vizdata.mlutils import collate_data
-from vizdata.botclassifier import classify_bots
-from vizdata.outlier import detect_outliers
 from vizdata.tradeclassification import classify_trades
 
 
