@@ -7,6 +7,7 @@ from vizdata.analysis import analyze_data
 from vizdata.mlutils import collate_data
 from vizdata.botclassifier import classify_bots
 from vizdata.outlier import detect_outliers
+from vizdata.tradeclassification import classify_trades
 
 
 # -- CLI ----------------------------------------------------------------------
@@ -30,7 +31,7 @@ def main():
             "--mode",
             "-m",
             dest="mode",
-            choices=["analysis", "classification", "outlier"],
+            choices=["analysis", "trade-classification"],
             default="analysis",
             help="Mode of operation: 'analysis' (default) for visualization, "
                     "'classification' for bot detection, "
@@ -54,17 +55,8 @@ def main():
 
     if args.mode == "analysis":
         analyze_data(files)
-    elif args.mode == "classification":
-        # Placeholder for classification logic
-        data = collate_data(files)
-        if data is None:
-            parser.error("No valid data for classification")
-        classify_bots(data)
-    elif args.mode == "outlier":
-        data = collate_data(files)
-        if data is None:
-            parser.error("No valid data for outlier detection")
-        detect_outliers(data)
+    elif args.mode == "trade-classification":
+        classify_trades(files)
     else:
         parser.error(f"Unknown mode: {args.mode}")
 
