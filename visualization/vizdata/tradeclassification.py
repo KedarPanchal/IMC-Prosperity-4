@@ -185,23 +185,23 @@ def _pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
             )
     pca1_text = control_axes.text(
         0.05,
-        0.75,
+        0.68,
         "PCA Component 1 Composition:\n\n" +
         '\n'.join(f"{col}: {contributions_dataframe[col].iloc[0]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightblue", alpha=0.5, boxstyle="round"),
         transform=control_axes.transAxes,
         verticalalignment='top',
-        size=8
+        size=7
         )
     pca2_text = control_axes.text(
         0.05,
-        0.35,
+        0.28,
         "PCA Component 2 Composition:\n\n" +
         '\n'.join(f"{col}: {contributions_dataframe[col].iloc[1]:.2f}%" for col in contributions_dataframe.columns),
         bbox=dict(fc="lightgreen", alpha=0.5, boxstyle="round"),
         transform=control_axes.transAxes,
         verticalalignment='top',
-        size=8
+        size=7
         )
     return pca1_text, pca2_text
 
@@ -516,19 +516,19 @@ def _outlier_detection_gui(
         control_axes: Axes,
         isolation_cursor: mplcursors.Cursor
         ):
-    tree_axes = control_axes.inset_axes((0.6, 0.8, 0.42, 0.04))
+    tree_axes = control_axes.inset_axes((0.6, 0.83, 0.42, 0.04))
     tree_label = widgets.TextBox(
         tree_axes,
         label="Number of Trees: ",
         initial="100"
         )
-    seed_axes = control_axes.inset_axes((0.4, 0.75, 0.62, 0.04))
+    seed_axes = control_axes.inset_axes((0.4, 0.78, 0.62, 0.04))
     seed_label = widgets.TextBox(
         seed_axes,
         label="Random Seed (Outlier): ",
         initial="0"
         )
-    enable_axes = control_axes.inset_axes((0.4, 0.67, 0.62, 0.07))
+    enable_axes = control_axes.inset_axes((0.4, 0.7, 0.62, 0.07))
     enable = widgets.CheckButtons(
         enable_axes,
         labels=["Show Inliers", "Show Outliers"],
@@ -657,5 +657,7 @@ def classify_trades(files: list[str]):
             control_axes
             )
 
+    # Show the PCA component contributions in the control panel
+    _ = _pca_contributions(pca, features, control_axes)
     # Actually show the plot
     plt.show()
