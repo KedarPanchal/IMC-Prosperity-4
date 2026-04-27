@@ -153,7 +153,7 @@ def _collate_data(files: list[str]) -> pd.DataFrame | None:
         return None
 
 
-def _preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
+def _preprocess_data(data: pd.DataFrame):
     """Preprocess the data for machine learning by performing feature
     engineering and normalization.
 
@@ -180,6 +180,20 @@ def _preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
 # -- PLOTTING HELPERS ---------------------------------------------------------
 
 def _pca_contributions(pca: PCA, features: pd.DataFrame, control_axes: Axes):
+    """Shows the PCA component contributions for each original feature in the
+    control panel.
+
+    Args:
+        pca: The fitted PCA model, used to compute the contributions of each
+        original feature to the PCA components.
+        features: The DataFrame containing the original features, used to label
+        the contributions in the control panel.
+        control_axes: The axes to add the PCA contribution annotations to.
+
+    Returns:
+        The Text objects for the PCA component contributions, since matplotlib
+        requires keeping references to them to prevent garbage collection.
+    """
     contributions = np.square(pca.components_)
     contributions = contributions / contributions.sum(axis=1, keepdims=True)
     contributions_dataframe = pd.DataFrame(
@@ -282,12 +296,9 @@ def _build_classification_cursor(
 
     Args:
         plot: The scatter plot to attach the cursor to.
-        data: The original DataFrame containing the trading data, used to
-        display detailed information in the hover annotations.
-        kmeans: The fitted KMeans model, used to display the cluster label in
-        the hover annotations.
-        colormap: The colormap used for plotting, used to set the background
-        color of the hover annotations based on the cluster label.
+        data: The original DataFrame containing the trading data.
+        kmeans: The fitted KMeans model.
+        colormap: The colormap used for plotting.
 
     Returns:
         The created mplcursors.Cursor object.
@@ -328,8 +339,7 @@ def _kmeans_gui(
     Args:
         fig: The figure to add the GUI to.
         data: The PCA-transformed data to plot.
-        df: The original DataFrame containing the trading data, used for hover
-        annotations.
+        df: The original DataFrame containing the trading data.
         control_axes: The axes to add the GUI controls to.
         data_axes: The axes to update with the new clustering results when the
         controls are adjusted.
@@ -426,14 +436,15 @@ def _plot_isolation_data(
     forest labels.
 
     Args:
+        data: The original data to fit the isolation forest on
+        pca_features: The PCA-transformed data to plot.
         isolation_axes: The axes to plot the data on.
         data: The preprocessed data to plot.
         tree_count: The number of trees to use for the isolation forest.
         seed: The random seed to use for the isolation forest.
 
     Returns:
-        The fitted IsolationForest model, the scatter plot object, and the
-        fitted PCA model.
+        The fitted IsolationForest model and the scatter plot object.
     """
     # Perform isolation forest outlier detection
     isolation = IsolationForest(
@@ -480,10 +491,9 @@ def _build_isolation_cursor(
 
     Args:
         isolation_scatter: The scatter plot to attach the cursor to.
-        data: The original DataFrame containing the trading data, used to
-        display detailed information in the hover annotations.
+        data: The original DataFrame containing the trading data.
         decision_scores: The isolation forest decision scores for each data
-        point, used to display the outlier score in the hover annotations and
+        point.
         set the background color.
 
     Returns:
@@ -520,6 +530,28 @@ def _outlier_detection_gui(
         control_axes: Axes,
         isolation_cursor: mplcursors.Cursor
         ):
+    """Create a GUI for adjusting the number of trees and random seed for
+    isolation forest outlier detection, as well as checkboxes for showing
+    inliers and outliers.
+
+    Args:
+        fig: The figure to add the GUI to.
+        data: The original data to fit the isolation forest on.
+        df: The original DataFrame containing the trading data.
+        pca_features: The PCA-transformed data to plot.
+        isolation_axes: The axes to update with the new isolation forest
+        results when the controls are adjusted.
+        control_axes: The axes to add the GUI controls to.
+        isolation_cursor: The mplcursors.Cursor object to update with the new
+        isolation forest results when the controls are adjusted.
+
+    Returns:
+        The TextBox widgets for number of trees and random seed, the
+        CheckButtons widget for showing inliers and outliers, and the updated
+        cursor object after adjusting the isolation forest results. The TextBox
+        and CheckButtons widgets are returned since matplotlib requires keeping
+        references to them to prevent garbage collection.
+    """
     tree_axes = control_axes.inset_axes((0.6, 0.83, 0.42, 0.04))
     tree_label = widgets.TextBox(
         tree_axes,
@@ -608,7 +640,18 @@ def _detect_outliers(
         tree_count=100,
         seed=0
         )
+    """Performs isolation forest outlier detection on the trading bot data and
+    plots the results.
 
+    Args:
+        data: The original DataFrame containing the trading data.
+        scaled_features: The normalized feature values to fit the isolation
+        forest on.
+        pca_features: The PCA-transformed data to plot.
+        fig: The figure to add the plot and GUI to.
+        axes: The axes to plot the isolation forest results on.
+        control_axes: The axes to add the GUI controls to.
+    """
     # Create cursor for hover annotations
     isolation_cursor = _build_isolation_cursor(
         scatter,
@@ -633,6 +676,13 @@ def _detect_outliers(
 # -- MAIN LOGIC ---------------------------------------------------------------
 
 def classify_trades(files: list[str]):
+    """Classifies trading bots based on their behavior and characteristics
+    using k-means clustering and isolation forest outlier detection.
+
+    Args:
+        files: List of file paths to CSV files containing the trading data to
+        classify.
+    """
     data = _collate_data(files)
     if data is None:
         print("Error: No valid data to classify")
