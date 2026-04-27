@@ -512,6 +512,7 @@ def _outlier_detection_gui(
         fig: Figure,
         data: np.ndarray,
         df: pd.DataFrame,
+        pca_features: np.ndarray,
         isolation_axes: Axes,
         control_axes: Axes,
         isolation_cursor: mplcursors.Cursor
@@ -554,7 +555,7 @@ def _outlier_detection_gui(
 
         isolation, scatter = _plot_isolation_data(
             data,
-            df.values,
+            pca_features,
             isolation_axes,
             tree_count,
             seed,
@@ -566,11 +567,11 @@ def _outlier_detection_gui(
         filtered_df = df.copy()
         filtered_decision_scores = isolation.decision_function(data)
         if not enable.get_status()[0]:
-            filtered_df = filtered_df[isolation.predict(data) != 1]
-            filtered_decision_scores = filtered_decision_scores[isolation.predict(data) != 1]
+            filtered_df = filtered_df[filtered_decision_scores >= 0]
+            filtered_decision_scores = filtered_decision_scores[filtered_decision_scores >= 0]
         if not enable.get_status()[1]:
-            filtered_df = filtered_df[isolation.predict(data) != -1]
-            filtered_decision_scores = filtered_decision_scores[isolation.predict(data) != -1]
+            filtered_df = filtered_df[filtered_decision_scores >= 0]
+            filtered_decision_scores = filtered_decision_scores[filtered_decision_scores >= 0]
 
         # Rebuild the cursor, too
         isolation_cursor.remove()
@@ -617,6 +618,7 @@ def _detect_outliers(
         fig,
         scaled_features,
         data,
+        pca_features,
         axes,
         control_axes,
         isolation_cursor
