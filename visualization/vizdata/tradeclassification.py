@@ -567,8 +567,8 @@ def _outlier_detection_gui(
         filtered_df = df.copy()
         filtered_decision_scores = isolation.decision_function(data)
         if not enable.get_status()[0]:
-            filtered_df = filtered_df[filtered_decision_scores >= 0]
-            filtered_decision_scores = filtered_decision_scores[filtered_decision_scores >= 0]
+            filtered_df = filtered_df[filtered_decision_scores < 0]
+            filtered_decision_scores = filtered_decision_scores[filtered_decision_scores < 0]
         if not enable.get_status()[1]:
             filtered_df = filtered_df[filtered_decision_scores >= 0]
             filtered_decision_scores = filtered_decision_scores[filtered_decision_scores >= 0]
