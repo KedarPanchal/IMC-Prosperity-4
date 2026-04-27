@@ -349,7 +349,7 @@ def _kmeans_gui(
     seed_axes = control_axes.inset_axes((0.4, 0.9, 0.62, 0.04))
     seed_label = widgets.TextBox(
         seed_axes,
-        label="Random Seed: ",
+        label="Random Seed (Clustering): ",
         initial="0"
         )
 
@@ -516,19 +516,19 @@ def _outlier_detection_gui(
         control_axes: Axes,
         isolation_cursor: mplcursors.Cursor
         ):
-    tree_axes = control_axes.inset_axes((0.6, 0.95, 0.42, 0.04))
+    tree_axes = control_axes.inset_axes((0.6, 0.8, 0.42, 0.04))
     tree_label = widgets.TextBox(
         tree_axes,
         label="Number of Trees: ",
         initial="100"
         )
-    seed_axes = control_axes.inset_axes((0.4, 0.9, 0.62, 0.04))
+    seed_axes = control_axes.inset_axes((0.4, 0.75, 0.62, 0.04))
     seed_label = widgets.TextBox(
         seed_axes,
         label="Random Seed (Outlier): ",
         initial="0"
         )
-    enable_axes = control_axes.inset_axes((0.4, 0.85, 0.62, 0.04))
+    enable_axes = control_axes.inset_axes((0.4, 0.67, 0.62, 0.07))
     enable = widgets.CheckButtons(
         enable_axes,
         labels=["Show Inliers", "Show Outliers"],
