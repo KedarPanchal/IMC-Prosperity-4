@@ -455,8 +455,15 @@ def _analyze_trade_data(
     @price_cursor.connect("add")
     def on_add_price(sel):
         """Annotate hover selection on a price subplot."""
-        x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nPrice: {y}")
+        index = sel.index
+        local_data = data.iloc[[index]]
+
+        sel.annotation.set_text(
+            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
+            f"Price: {local_data['price'].iloc[0]}\n"
+            f"Buyer: {local_data['buyer'].iloc[0]}\n"
+            f"Seller: {local_data['seller'].iloc[0]}"
+            )
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
 
@@ -469,8 +476,15 @@ def _analyze_trade_data(
     @quantity_cursor.connect("add")
     def on_add_quantity(sel):
         """Annotate hover selection on a quantity subplot."""
-        x, y = sel.target
-        sel.annotation.set_text(f"Timestamp: {x}\nQuantity: {y}")
+        index = sel.index
+        local_data = data.iloc[[index]]
+
+        sel.annotation.set_text(
+            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
+            f"Quantity: {local_data['price'].iloc[0]}\n"
+            f"Buyer: {local_data['buyer'].iloc[0]}\n"
+            f"Seller: {local_data['seller'].iloc[0]}"
+            )
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightblue")
 
@@ -483,8 +497,16 @@ def _analyze_trade_data(
     @master_cursor.connect("add")
     def on_add_master(sel):
         """Annotate hover selection on the combined master axis."""
-        x, y = sel.target
-        sel.annotation.set_text(f"Item: {sel.artist.get_label()}\nTimestamp: {x}\nPrice: {y}")
+        index = sel.index
+        local_data = data.iloc[[index]]
+
+        sel.annotation.set_text(
+            f"Item: {sel.artist.get_label()}\n"
+            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
+            f"Price: {local_data['price'].iloc[0]}\n"
+            f"Buyer: {local_data['buyer'].iloc[0]}\n"
+            f"Seller: {local_data['seller'].iloc[0]}"
+            )
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
 
