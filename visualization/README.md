@@ -64,7 +64,7 @@ uv run visualization.py -f <file1.csv> [file2.csv ...] -m <mode>
 ```
 
 - **`-f` / `--files`** — one or more CSV paths to load (required)
-- **`-m` / `--mode`** — what to do with the data: `analysis` (default), `classification`, or `outlier`
+- **`-m` / `--mode`** — what to do with the data: `analysis` (default) or `trade-classification`
 
 ### File naming requirements
 
@@ -171,13 +171,13 @@ The price/orderbook window also has checkboxes to toggle individual series on an
 
 ---
 
-## Mode: `classification` — trading pattern clustering
+## Mode: `trade-classification` — clustering and outlier detection in one view
 
-Groups time windows of market activity into clusters based on price and volume behavior. Useful for spotting patterns like high-volatility periods, low-activity lulls, or unusual price moves.
+Analyzes your trade and price data together to find patterns and flag unusual moments. It opens a single window with **two panels side by side**: one for grouping similar market behaviors (clustering), and one for spotting anomalies (outlier detection). Both panels work in the same 2D PCA space, so you can compare them directly.
 
 ### File requirements
 
-Classification requires **both** trade files and price files for **the same set of days**:
+Trade classification requires **both** trade files and price files for **the same set of days**:
 
 - Trade filenames must contain the word **`trades`** somewhere in the name.
 - Price filenames must contain the word **`prices`** somewhere in the name.
@@ -186,109 +186,72 @@ Classification requires **both** trade files and price files for **the same set 
 If you provide trades for 2 days but prices for only 1 day (or vice versa), the tool will stop with an error.
 
 ```bash
-uv run visualization.py -f path/to/trades_day_0.csv path/to/prices_day_0.csv -m classification
+uv run visualization.py -f path/to/trades_day_0.csv path/to/prices_day_0.csv -m trade-classification
 ```
 
 ### What you see in the chart
 
-The classification window shows a **scatter plot** where each dot represents a 2-second time window. The axes are two "PCA components" — mathematical summaries of the data that try to capture the most variation. Points that are close together behaved similarly during that window; points that are far apart behaved differently.
+The window has **two scatter plot panels**, both showing the same data points laid out in 2D space (PCA), where each dot represents a 2000-tick window of data. Points that are close together behaved similarly during that window; points that are far apart behaved differently.
 
-The dots are colored by cluster (group), and **Voronoi boundaries** are drawn between cluster centers to show where one group ends and another begins.
+**Top panel — K-Means Clustering:**
+Dots are colored by which cluster (group) they belong to. **Voronoi boundaries** are drawn between cluster centers to show where one group ends and another begins. This helps you spot recurring market regimes — like periods of high activity versus calm stretches.
 
-Hovering over a dot shows a tooltip with the time window's start timestamp and the key metrics that went into that point (mid-price open/close/high/low, total volume, number of trades, average trade size, and the assigned cluster).
+**Bottom panel — Outlier Detection:**
+Dots are colored blue (**inlier**, normal) or red (**outlier**, unusual). The outlier detection uses an Isolation Forest algorithm to flag time windows that behaved very differently from the rest — sudden spikes, unusual lulls, or anything that stands out.
 
-### Left-side control panel (classification mode)
+Hovering over a dot in either panel shows a tooltip with that window's start timestamp and its key market metrics: mid-price open/close/high/low, price return, price range, total volume, number of trades, and average trade size. Clustering tooltips also show the assigned cluster; outlier tooltips also show the outlier score.
+
+### Left-side control panel (trade-classification mode)
 
 #### Number of Clusters (k) (text box)
 
-How many groups to divide the data into. Default is **10**.
+How many groups to divide the data into for the clustering panel. Default is **10**.
 
 - Type a number and press **Enter** to recompute the clusters immediately.
 - Fewer clusters → broader, coarser groups.
 - More clusters → finer distinctions, but may over-split similar behavior.
 
-#### Random Seed (text box)
+#### Random Seed (Clustering) (text box)
 
 K-means clustering has a small random component in how it picks starting points. The seed makes results reproducible. Default is **0**.
 
 - Type any non-negative integer and press **Enter** to recompute.
 - Changing the seed with the same k will sometimes give slightly different cluster assignments.
 
-#### PCA Component breakdown
-
-Below the controls, two colored info boxes show what metrics contribute most to each PCA axis:
-
-- **PCA Component 1** (blue box) — the main axis of variation in the data.
-- **PCA Component 2** (green box) — the secondary axis.
-
-Each metric is listed with its percentage contribution. This helps you understand what the x/y axes actually mean (e.g., "Component 1 is mostly total volume and number of trades").
-
----
-
-## Mode: `outlier` — unusual market moment detection
-
-Scans the data for time windows that behaved unusually compared to everything else — spikes, lulls, or anything the model considers anomalous. Great for quickly spotting moments worth investigating further.
-
-### File requirements
-
-Outlier detection uses the same files as classification — you need **both** trade files and price files for **the same set of days**:
-
-- Trade filenames must contain the word **`trades`** somewhere in the name.
-- Price filenames must contain the word **`prices`** somewhere in the name.
-- Both must include a `day_#` marker.
-
-```bash
-uv run visualization.py -f path/to/trades_day_0.csv path/to/prices_day_0.csv -m outlier
-```
-
-### What you see in the chart
-
-The outlier window has **two panels**:
-
-**Top panel — PCA scatter plot:**
-Each dot is a 2-second time window, laid out in 2D space (PCA) so that similar windows end up close together. Points are colored by whether the model considers them **inliers** (blue, normal) or **outliers** (red, unusual).
-
-**Bottom panel — Decision score chart:**
-The same time windows sorted by their "outlier score" — a measure of how isolated (i.e. unusual) each window is. Points that score below zero are considered outliers; above zero are inliers. The lower the score, the more anomalous the window.
-
-Hovering over a dot in the **top PCA panel** shows a tooltip with the time window's start timestamp, its key market metrics, and its outlier score. Hovering over a dot in the **bottom decision score panel** shows that window's outlier score.
-
-### Left-side control panel (outlier mode)
-
 #### Number of Trees (text box)
 
-Controls how many decision trees the Isolation Forest algorithm uses internally. Default is **100**.
+Controls how many decision trees the Isolation Forest algorithm uses for the outlier detection panel. Default is **100**.
 
 - Type a number and press **Enter** to recompute.
 - Higher values → more stable, consistent results, but slower to compute.
 - Lower values → faster, but results may vary slightly between runs.
 
-#### Random Seed (text box)
+#### Random Seed (Outlier) (text box)
 
-Makes results reproducible. Default is **0**.
+Makes the outlier detection results reproducible. Default is **0**.
 
 - Type any non-negative integer and press **Enter** to recompute.
 - Changing the seed with the same tree count will sometimes give slightly different outlier assignments.
 
-#### Inlier / Outlier checkboxes
+#### Show Inliers / Show Outliers (checkboxes)
 
-Two checkboxes let you show or hide each category of points:
+Two checkboxes let you show or hide each category of points in the outlier detection panel:
 
 | Checkbox | What it shows |
 |---|---|
-| **Inlier** | Normal time windows (blue dots) |
-| **Outlier** | Anomalous time windows (red dots) |
+| **Show Inliers** | Normal time windows (blue dots) |
+| **Show Outliers** | Anomalous time windows (red dots) |
 
-Both are checked by default. Unchecking **Inlier** leaves only the flagged outliers visible — useful when you want to focus on just the unusual moments without the noise of normal data.
+Both are checked by default. Unchecking **Show Inliers** leaves only the flagged outliers visible — useful when you want to focus on just the unusual moments without the noise of normal data.
 
 #### PCA Component breakdown
 
-Below the controls, two colored info boxes explain what each axis of the scatter plot actually represents:
+Below the controls, two colored info boxes show what metrics contribute most to each PCA axis used in both panels:
 
-- **PCA Component 1** (blue box) — the main axis of variation across all windows.
+- **PCA Component 1** (blue box) — the main axis of variation in the data.
 - **PCA Component 2** (green box) — the secondary axis.
 
-Each metric is listed with its percentage contribution, so you can tell at a glance what drove the separation (e.g., "Component 1 is mostly total volume and number of trades").
+Each metric is listed with its percentage contribution. This helps you understand what the x/y axes actually mean (e.g., "Component 1 is mostly total volume and number of trades").
 
 ---
 
@@ -299,5 +262,5 @@ Each metric is listed with its percentage contribution, so you can tell at a gla
 - **Chart looks empty**: Confirm the CSV has actual data rows and uses semicolons (`;`) as the separator.
 - **"Warning: File … does not contain a valid day number"**: Rename the file to include `day_0`, `day_1`, etc. in its filename.
 - **"Warning: File … is not a valid trade or price data file"** (analysis mode): The CSV didn't match either expected schema. Trade files need a `buyer` column; price files need a `profit_and_loss` column.
-- **"Warning: File … is not a valid trade or price dataframe"** (classification mode): The filename must contain `trades` or `prices` for the classifier to tell them apart.
+- **"Warning: File … is not a valid trade or price dataframe"** (trade-classification mode): The filename must contain `trades` or `prices` for the classifier to tell them apart.
 - **"Error: Processed N trade dataframes but only M price dataframes"**: You didn't pass a matching trade+price pair for every day. Make sure each day has exactly one trades file and one prices file.
