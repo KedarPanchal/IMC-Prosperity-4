@@ -145,9 +145,12 @@ def _collate_data(files: list[str]) -> pd.DataFrame | None:
                         "avg_trade_size": avg_trade_size if pd.notna(avg_trade_size) else 0  # type: ignore
                     }, index=["timestamp_start"]),
                 )
-
-    final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
-    return final_dataframe.set_index("timestamp_start")
+    try:
+        final_dataframe = pd.concat(final_dataframe_components, ignore_index=True)
+        return final_dataframe.set_index("timestamp_start")
+    except ValueError:
+        print("Error: No valid data to process after aggregation")
+        return None
 
 
 def _preprocess_data(data: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
