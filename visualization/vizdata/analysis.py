@@ -334,6 +334,30 @@ def _bot_selection_gui(
         quantity_cursor: mplcursors.Cursor,
         master_cursor: mplcursors.Cursor
         ):
+    """Renders a GUI with checkboxes for selecting which bots to include in the
+    analysis.
+    Args:
+        fig: The matplotlib figure to which the GUI will be attached.
+        axes: The array of subplot axes for individual trade items.
+        ax_master: The master axis for plotting all items together.
+        control_axes: The axis on which to place the GUI controls.
+        data: The full trade data DataFrame.
+        price_artists: The list of line artists for the price series.
+        price_artists_data_raw: The list of raw price data for each plotted
+        item.
+        quantity_artists: The list of line artists for the quantity series.
+        quantity_artists_data_raw: The list of raw quantity data for each
+        plotted item.
+        master_artists: The list of line artists for the master plot.
+        price_cursor: The mplcursors cursor for the price series.
+        quantity_cursor: The mplcursors cursor for the quantity series.
+        master_cursor: The mplcursors cursor for the master plot.
+
+    Returns:
+        The created bot selection checkbox GUI control and the updated cursors
+        since matplotlib requires keeping references to them to prevent garbage
+        collection.
+    """
     bots = sorted(set(data["buyer"]) | set(data["seller"]))
     bot_selection_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
     bot_selection_checkbox = widgets.CheckButtons(
@@ -414,6 +438,21 @@ def _build_trade_cursor(
         data_column: str,
         data_color: str
         ):
+    """Builds an mplcursors cursor for annotating hover selections on price or
+    quantity subplots.
+
+    Args:
+        data: The full trade data DataFrame.
+        artists: The list of line artists corresponding to the subplot.
+        data_type: A string indicating the type of data
+        ("Price" or "Quantity").
+        data_column: The column name in the DataFrame for the data to display
+        in the annotation.
+        data_color: The color to use for the annotation background.
+
+    Returns:
+        An mplcursors cursor object with the hover annotation configured.
+    """
     cursor = mplcursors.cursor(
         artists,
         hover=mplcursors.HoverMode.Transient
@@ -438,6 +477,17 @@ def _build_trade_cursor(
 
 
 def _build_trade_master_cursor(data: pd.DataFrame, ax_master: Axes):
+    """Builds an mplcursors cursor for annotating hover selections on the
+    master trade subplot.
+
+    Args:
+        data: The full trade data DataFrame.
+        ax_master: The master axis for plotting all items together.
+
+    Returns:
+        An mplcursors cursor object with the hover annotation configured for the
+        master plot.
+    """
     master_cursor = mplcursors.cursor(
         ax_master,
         hover=mplcursors.HoverMode.Transient
