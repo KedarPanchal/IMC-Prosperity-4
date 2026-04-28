@@ -358,7 +358,7 @@ def _bot_selection_gui(
         since matplotlib requires keeping references to them to prevent garbage
         collection.
     """
-    bots = sorted(set(data["buyer"]) | set(data["seller"]))
+    bots = set(data["buyer"]) | set(data["seller"])
     bot_selection_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
     bot_selection_checkbox = widgets.CheckButtons(
         bot_selection_checkbox_axes,
@@ -546,7 +546,12 @@ def _plot_trade_data(
         master_artists: Mutable list extended with the line artist(s) for the
         price series on the master plot.
     """
-    mask = (data["symbol"] == symbol) & (data["buyer"].isin(_plot_trade_data.valid_bots) | data["seller"].isin(_plot_trade_data.valid_bots))  # type: ignore
+
+    if _plot_trade_data.valid_bots is not None:  # type: ignore
+        mask = (data["symbol"] == symbol) & (data["buyer"].isin(_plot_trade_data.valid_bots) | data["seller"].isin(_plot_trade_data.valid_bots))  # type: ignore
+    else:
+        mask = symbol == data["symbol"]
+
     # set shared axis data
     axes[0, plot].set_title(symbol)  # type: ignore
     axes[1, plot].set_xlabel("Timestamp")  # type: ignore
@@ -626,7 +631,11 @@ def _analyze_trade_data(
     quantity_artists_data_raw = []
     master_artists = []
 
-    _plot_trade_data.valid_bots = list(filter(pd.notna, sorted(set(data["buyer"]) | set(data["seller"]))))  # type: ignore
+    bots = list(filter(pd.notna, sorted(set(data["buyer"]) | set(data["seller"]))))  # type: ignore
+    if len(bots) <= 1:
+        _plot_trade_data.valid_bots = None  # type: ignore
+    else:
+        _plot_trade_data.valid_bots = bots  # type: ignore
 
     # render each individual trade item in a subplot
     symbols = sorted(set(data["symbol"]))
@@ -682,22 +691,24 @@ def _analyze_trade_data(
         quantity_artists_data_raw=quantity_artists_data_raw,
         master_artists=master_artists
         )
-    _bot_selection_gui.plots_shown = symbols[:2]  # type: ignore
-    bc_, price_cursor, quantity_cursor, master_cursor = _bot_selection_gui(
-        fig,
-        axes,
-        ax_master,
-        control_axes,
-        data,
-        price_artists,
-        price_artists_data_raw,
-        quantity_artists,
-        quantity_artists_data_raw,
-        master_artists,
-        price_cursor,
-        quantity_cursor,
-        master_cursor
-        )
+    # Only plot bot selection if there's multiple bots to select
+    if len(bots) > 1:
+        _bot_selection_gui.plots_shown = symbols[:2]  # type: ignore
+        bc_, price_cursor, quantity_cursor, master_cursor = _bot_selection_gui(
+            fig,
+            axes,
+            ax_master,
+            control_axes,
+            data,
+            price_artists,
+            price_artists_data_raw,
+            quantity_artists,
+            quantity_artists_data_raw,
+            master_artists,
+            price_cursor,
+            quantity_cursor,
+            master_cursor
+            )
 
     # actually plot everything
     ax_master.legend()
