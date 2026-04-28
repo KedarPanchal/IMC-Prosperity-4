@@ -358,7 +358,7 @@ def _bot_selection_gui(
         since matplotlib requires keeping references to them to prevent garbage
         collection.
     """
-    bots = set(data["buyer"]) | set(data["seller"])
+    bots = sorted(set(data["buyer"]) | set(data["seller"]))
     bot_selection_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
     bot_selection_checkbox = widgets.CheckButtons(
         bot_selection_checkbox_axes,
