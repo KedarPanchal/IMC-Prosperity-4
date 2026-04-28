@@ -317,6 +317,54 @@ def _plot_selection_gui(
     return plot_selection_checkbox
 
 
+def _bot_selection_gui(
+        fig: Figure,
+        axes: np.ndarray,
+        ax_master: Axes,
+        control_axes: Axes,
+        data: pd.DataFrame,
+        price_artists: list,
+        price_artists_data_raw: list,
+        quantity_artists: list,
+        quantity_artists_data_raw: list,
+        master_artists: list
+        ):
+    bots = sorted(set(data["buyer"]) | set(data["seller"]))
+    bot_selection_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
+    bot_selection_checkbox = widgets.CheckButtons(
+        bot_selection_checkbox_axes,
+        labels=list(bots),
+        actives=[True] * len(bots)
+        )
+
+    def show_bots(label):
+        active_bots = [bot for bot, active in zip(bots, bot_selection_checkbox.get_status()) if active]
+        axes[0, 0].clear()
+        axes[0, 1].clear()
+        axes[1, 0].clear()
+        axes[1, 1].clear()
+
+        for plot, symbol in enumerate(sorted(set(data["symbol"]))[:2]):
+            _plot_trade_data(
+                data=data,
+                plot=plot,
+                symbol=symbol,
+                axes=axes,
+                ax_master=ax_master,
+                price_artists=price_artists,
+                price_artists_data_raw=price_artists_data_raw,
+                quantity_artists=quantity_artists,
+                quantity_artists_data_raw=quantity_artists_data_raw,
+                master_artists=master_artists,
+                valid_bots=active_bots
+            )
+        fig.canvas.draw_idle()
+
+    bot_selection_checkbox.on_clicked(show_bots)
+
+    return bot_selection_checkbox
+
+
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
 
 def _plot_trade_data(
@@ -329,7 +377,8 @@ def _plot_trade_data(
         price_artists_data_raw: list,
         quantity_artists: list,
         quantity_artists_data_raw: list,
-        master_artists: list
+        master_artists: list,
+        valid_bots: list = []
         ):
     """Plot price and quantity data for a single trade item in a subplot,
     and add the price series to the master plot.
@@ -351,7 +400,7 @@ def _plot_trade_data(
         master_artists: Mutable list extended with the line artist(s) for the
         price series on the master plot.
     """
-    mask = data["symbol"] == symbol
+    mask = (data["symbol"] == symbol) & (data["buyer"].isin(valid_bots) | data["seller"].isin(valid_bots))
     # set shared axis data
     axes[0, plot].set_title(symbol)  # type: ignore
     axes[1, plot].set_xlabel("Timestamp")  # type: ignore
@@ -431,6 +480,8 @@ def _analyze_trade_data(
     quantity_artists_data_raw = []
     master_artists = []
 
+    bots = filter(pd.notna, sorted(set(data["buyer"]) | set(data["seller"])))
+
     # render each individual trade item in a subplot
     for plot, symbol in enumerate(sorted(set(data["symbol"]))[:2]):
         _plot_trade_data(
@@ -443,14 +494,15 @@ def _analyze_trade_data(
             price_artists_data_raw=price_artists_data_raw,
             quantity_artists=quantity_artists,
             quantity_artists_data_raw=quantity_artists_data_raw,
-            master_artists=master_artists
+            master_artists=master_artists,
+            valid_bots=list(bots)
         )
 
     # create cursor for the price plot
     price_cursor = mplcursors.cursor(
-            price_artists,
-            hover=mplcursors.HoverMode.Transient
-            )
+        price_artists,
+        hover=mplcursors.HoverMode.Transient
+        )
 
     @price_cursor.connect("add")
     def on_add_price(sel):
@@ -528,7 +580,19 @@ def _analyze_trade_data(
         quantity_artists=quantity_artists,
         quantity_artists_data_raw=quantity_artists_data_raw,
         master_artists=master_artists
-    )
+        )
+    bc_ = _bot_selection_gui(
+        fig,
+        axes,
+        ax_master,
+        control_axes,
+        data,
+        price_artists,
+        price_artists_data_raw,
+        quantity_artists,
+        quantity_artists_data_raw,
+        master_artists
+        )
 
     # actually plot everything
     ax_master.legend()
