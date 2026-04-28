@@ -380,6 +380,7 @@ def _bot_selection_gui(
         axes[0, 1].clear()
         axes[1, 0].clear()
         axes[1, 1].clear()
+        ax_master.clear()
 
         price_artists.clear()
         price_artists_data_raw.clear()
