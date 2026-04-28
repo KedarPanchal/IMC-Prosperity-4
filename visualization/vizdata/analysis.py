@@ -259,6 +259,8 @@ def _plot_selection_gui(
             plot_selection_checkbox.set_active(sorted_set.index(label), state=True)
             plot_selection_queue.append(label)
 
+            _bot_selection_gui.plots_shown = plot_selection_queue.copy()  # type: ignore
+
             axes[0, 0].clear()
             axes[0, 1].clear()
             axes[1, 0].clear()
@@ -327,7 +329,10 @@ def _bot_selection_gui(
         price_artists_data_raw: list,
         quantity_artists: list,
         quantity_artists_data_raw: list,
-        master_artists: list
+        master_artists: list,
+        price_cursor: mplcursors.Cursor,
+        quantity_cursor: mplcursors.Cursor,
+        master_cursor: mplcursors.Cursor
         ):
     bots = sorted(set(data["buyer"]) | set(data["seller"]))
     bot_selection_checkbox_axes = control_axes.inset_axes((0.05, 0.05, 0.9, 0.2))
@@ -338,13 +343,27 @@ def _bot_selection_gui(
         )
 
     def show_bots(label):
+        nonlocal price_cursor, quantity_cursor, master_cursor
+        nonlocal price_artists, price_artists_data_raw, quantity_artists, quantity_artists_data_raw, master_artists
+
         active_bots = [bot for bot, active in zip(bots, bot_selection_checkbox.get_status()) if active]
+        # Clear the axes and cursors
+        price_cursor.remove()
+        quantity_cursor.remove()
+        master_cursor.remove()
+
         axes[0, 0].clear()
         axes[0, 1].clear()
         axes[1, 0].clear()
         axes[1, 1].clear()
 
-        for plot, symbol in enumerate(sorted(set(data["symbol"]))[:2]):
+        price_artists.clear()
+        quantity_artists.clear()
+        master_artists.clear()
+
+        # Re-plot the data
+        for plot, symbol in enumerate(_bot_selection_gui.plots_shown):  # type: ignore
+            _plot_trade_data.valid_bots = active_bots  # type: ignore
             _plot_trade_data(
                 data=data,
                 plot=plot,
@@ -356,13 +375,89 @@ def _bot_selection_gui(
                 quantity_artists=quantity_artists,
                 quantity_artists_data_raw=quantity_artists_data_raw,
                 master_artists=master_artists,
-                valid_bots=active_bots
             )
+        # Re-render the cursors since we cleared the axes
+        local_data = data[data["buyer"].isin(active_bots) | data["seller"].isin(active_bots)]
+        price_cursor = _build_trade_cursor(
+            local_data,  # type: ignore
+            price_artists,
+            "Price",
+            "price",
+            "lightgreen"
+            )
+        quantity_cursor = _build_trade_cursor(
+            local_data,  # type: ignore
+            quantity_artists,
+            "Quantity",
+            "quantity",
+            "lightblue"
+            )
+        master_cursor = _build_trade_master_cursor(
+            local_data,  # type: ignore
+            ax_master
+            )
+
+        ax_master.legend()
         fig.canvas.draw_idle()
 
     bot_selection_checkbox.on_clicked(show_bots)
 
-    return bot_selection_checkbox
+    return bot_selection_checkbox, price_cursor, quantity_cursor, master_cursor
+
+
+def _build_trade_cursor(
+        data: pd.DataFrame,
+        artists: list,
+        data_type: str,
+        data_column: str,
+        data_color: str
+        ):
+    cursor = mplcursors.cursor(
+        artists,
+        hover=mplcursors.HoverMode.Transient
+        )
+
+    @cursor.connect("add")
+    def on_add(sel):
+        """Annotate hover selection on a price subplot."""
+        index = sel.index
+        local_data = data.iloc[[index]]
+
+        sel.annotation.set_text(
+            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
+            f"{data_type}: {local_data[data_column].iloc[0]}\n"
+            f"Buyer: {local_data['buyer'].iloc[0]}\n"
+            f"Seller: {local_data['seller'].iloc[0]}"
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.9)
+        sel.annotation.get_bbox_patch().set_facecolor(data_color)
+
+    return cursor
+
+
+def _build_trade_master_cursor(data: pd.DataFrame, ax_master: Axes):
+    master_cursor = mplcursors.cursor(
+        ax_master,
+        hover=mplcursors.HoverMode.Transient
+        )
+
+    @master_cursor.connect("add")
+    def on_add_master(sel):
+        """Annotate hover selection on the combined master axis."""
+        index = sel.index
+        local_data = data.iloc[[index]]
+
+        sel.annotation.set_text(
+            f"Item: {sel.artist.get_label()}\n"
+            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
+            f"Price: {local_data['price'].iloc[0]}\n"
+            f"Buyer: {local_data['buyer'].iloc[0]}\n"
+            f"Seller: {local_data['seller'].iloc[0]}"
+            )
+        sel.annotation.get_bbox_patch().set_alpha(0.9)
+        sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
+
+    return master_cursor
 
 
 # -- ANALYSIS HELPER FUNCTIONS ------------------------------------------------
@@ -378,7 +473,6 @@ def _plot_trade_data(
         quantity_artists: list,
         quantity_artists_data_raw: list,
         master_artists: list,
-        valid_bots: list = []
         ):
     """Plot price and quantity data for a single trade item in a subplot,
     and add the price series to the master plot.
@@ -400,7 +494,7 @@ def _plot_trade_data(
         master_artists: Mutable list extended with the line artist(s) for the
         price series on the master plot.
     """
-    mask = (data["symbol"] == symbol) & (data["buyer"].isin(valid_bots) | data["seller"].isin(valid_bots))
+    mask = (data["symbol"] == symbol) & (data["buyer"].isin(_plot_trade_data.valid_bots) | data["seller"].isin(_plot_trade_data.valid_bots))  # type: ignore
     # set shared axis data
     axes[0, plot].set_title(symbol)  # type: ignore
     axes[1, plot].set_xlabel("Timestamp")  # type: ignore
@@ -468,10 +562,10 @@ def _analyze_trade_data(
     # The first two rows show price and quantity data for each trade item
     # The third row contain a master subplot of all the trade items
     fig, axes, ax_master, control_axes = _make_plots(
-            "Trade Data Analysis",
-            2,
-            2,
-            )
+        "Trade Data Analysis",
+        2,
+        2,
+        )
 
     # Create arrays to store each artist for rendering the cursors
     price_artists = []
@@ -480,10 +574,11 @@ def _analyze_trade_data(
     quantity_artists_data_raw = []
     master_artists = []
 
-    bots = filter(pd.notna, sorted(set(data["buyer"]) | set(data["seller"])))
+    _plot_trade_data.valid_bots = list(filter(pd.notna, sorted(set(data["buyer"]) | set(data["seller"]))))  # type: ignore
 
     # render each individual trade item in a subplot
-    for plot, symbol in enumerate(sorted(set(data["symbol"]))[:2]):
+    symbols = sorted(set(data["symbol"]))
+    for plot, symbol in enumerate(symbols[:2]):
         _plot_trade_data(
             data=data,
             plot=plot,
@@ -495,72 +590,26 @@ def _analyze_trade_data(
             quantity_artists=quantity_artists,
             quantity_artists_data_raw=quantity_artists_data_raw,
             master_artists=master_artists,
-            valid_bots=list(bots)
         )
 
     # create cursor for the price plot
-    price_cursor = mplcursors.cursor(
+    price_cursor = _build_trade_cursor(
+        data,
         price_artists,
-        hover=mplcursors.HoverMode.Transient
+        "Price",
+        "price",
+        "lightgreen"
+        )
+    quantity_cursor = _build_trade_cursor(
+        data,
+        quantity_artists,
+        "Quantity",
+        "quantity",
+        "lightblue"
         )
 
-    @price_cursor.connect("add")
-    def on_add_price(sel):
-        """Annotate hover selection on a price subplot."""
-        index = sel.index
-        local_data = data.iloc[[index]]
-
-        sel.annotation.set_text(
-            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
-            f"Price: {local_data['price'].iloc[0]}\n"
-            f"Buyer: {local_data['buyer'].iloc[0]}\n"
-            f"Seller: {local_data['seller'].iloc[0]}"
-            )
-        sel.annotation.get_bbox_patch().set_alpha(0.9)
-        sel.annotation.get_bbox_patch().set_facecolor("lightgreen")
-
-    # create cursor for the quantity plot
-    quantity_cursor = mplcursors.cursor(
-            quantity_artists,
-            hover=mplcursors.HoverMode.Transient
-            )
-
-    @quantity_cursor.connect("add")
-    def on_add_quantity(sel):
-        """Annotate hover selection on a quantity subplot."""
-        index = sel.index
-        local_data = data.iloc[[index]]
-
-        sel.annotation.set_text(
-            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
-            f"Quantity: {local_data['price'].iloc[0]}\n"
-            f"Buyer: {local_data['buyer'].iloc[0]}\n"
-            f"Seller: {local_data['seller'].iloc[0]}"
-            )
-        sel.annotation.get_bbox_patch().set_alpha(0.9)
-        sel.annotation.get_bbox_patch().set_facecolor("lightblue")
-
     # create master cursor
-    master_cursor = mplcursors.cursor(
-            ax_master,
-            hover=mplcursors.HoverMode.Transient
-            )
-
-    @master_cursor.connect("add")
-    def on_add_master(sel):
-        """Annotate hover selection on the combined master axis."""
-        index = sel.index
-        local_data = data.iloc[[index]]
-
-        sel.annotation.set_text(
-            f"Item: {sel.artist.get_label()}\n"
-            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
-            f"Price: {local_data['price'].iloc[0]}\n"
-            f"Buyer: {local_data['buyer'].iloc[0]}\n"
-            f"Seller: {local_data['seller'].iloc[0]}"
-            )
-        sel.annotation.get_bbox_patch().set_alpha(0.9)
-        sel.annotation.get_bbox_patch().set_facecolor("lightyellow")
+    master_cursor = _build_trade_master_cursor(data, ax_master)
 
     # Render control panel
     r_, t1_, t2_ = _denoise_gui(
@@ -581,7 +630,8 @@ def _analyze_trade_data(
         quantity_artists_data_raw=quantity_artists_data_raw,
         master_artists=master_artists
         )
-    bc_ = _bot_selection_gui(
+    _bot_selection_gui.plots_shown = symbols[:2]  # type: ignore
+    bc_, price_cursor, quantity_cursor, master_cursor = _bot_selection_gui(
         fig,
         axes,
         ax_master,
@@ -591,7 +641,10 @@ def _analyze_trade_data(
         price_artists_data_raw,
         quantity_artists,
         quantity_artists_data_raw,
-        master_artists
+        master_artists,
+        price_cursor,
+        quantity_cursor,
+        master_cursor
         )
 
     # actually plot everything
