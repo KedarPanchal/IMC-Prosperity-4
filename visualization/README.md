@@ -169,6 +169,17 @@ The price/orderbook window also has checkboxes to toggle individual series on an
 | **Show bid volume** | Bid volume lines in the volume subplot |
 | **Show ask volume** | Ask volume lines in the volume subplot |
 
+#### Bot filters (trade data window only)
+
+At the very bottom of the left control panel in the **trade data window**, there is a set of checkboxes listing every unique market participant (buyer/seller) found in your trade data.
+
+- All bots are **checked by default**, meaning all trades are shown.
+- **Uncheck a bot** to remove every trade where that entity appeared as either the buyer or the seller. The price chart, quantity chart, and the "All Items" master strip all update immediately.
+- **Re-check a bot** to bring those trades back.
+- Hovering over a data point always shows the buyer and seller for that trade, so you can quickly identify which bots are responsible for interesting activity before filtering.
+
+> **Tip:** To focus on a specific bot's activity, uncheck all the others. Since there's no "uncheck all" button, the quickest way is to uncheck them one by one.
+
 ---
 
 ## Mode: `trade-classification` — clustering and outlier detection in one view
