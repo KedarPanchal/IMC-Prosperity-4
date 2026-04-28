@@ -462,18 +462,18 @@ def _build_trade_cursor(
     @cursor.connect("add")
     def on_add(sel):
         """Annotate hover selection on a price subplot."""
-        index = sel.index
-        local_data = data.iloc[[index]]
-
+        x, _ = sel.target
+        timestamp = int(x)
+        local_data = data[data["timestamp"] <= timestamp].iloc[[-1]]
         sel.annotation.set_text(
-            f"Timestamp: {local_data['timestamp'].iloc[0]}\n"
-            f"{data_type}: {local_data[data_column].iloc[0]}\n"
-            f"Buyer: {local_data['buyer'].iloc[0]}\n"
-            f"Seller: {local_data['seller'].iloc[0]}"
+            f"Timestamp: {timestamp}\n"  # type: ignore
+            f"{data_type}: {local_data[data_column].iloc[0]}\n"  # type: ignore
+            f"Buyer: {local_data['buyer'].iloc[0]}\n"  # type: ignore
+            f"Seller: {local_data['seller'].iloc[0]}"  # type: ignore
             )
+
         sel.annotation.get_bbox_patch().set_alpha(0.9)
         sel.annotation.get_bbox_patch().set_facecolor(data_color)
-
     return cursor
 
 
@@ -497,8 +497,9 @@ def _build_trade_master_cursor(data: pd.DataFrame, ax_master: Axes):
     @master_cursor.connect("add")
     def on_add_master(sel):
         """Annotate hover selection on the combined master axis."""
-        index = sel.index
-        local_data = data.iloc[[index]]
+        x, _ = sel.target
+        timestamp = int(x)
+        local_data = data[data["timestamp"] <= timestamp].iloc[[-1]]
 
         sel.annotation.set_text(
             f"Item: {sel.artist.get_label()}\n"
