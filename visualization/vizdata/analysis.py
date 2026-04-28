@@ -246,7 +246,8 @@ def _plot_selection_gui(
     plot_selection_checkbox = widgets.CheckButtons(
         plot_selection_checkbox_axes,
         labels=list(sorted_set),
-        actives=[True, True] + [False] * (len(sorted_set) - 2)
+        actives=[True, True] + [False] * (len(sorted_set) - 2),
+        label_props={"fontsize": [min(10, 200 / len(sorted_set))] * len(sorted_set)}
         )
     plot_selection_queue = sorted_set[:2]  # Always length 2
 
@@ -694,6 +695,8 @@ def _analyze_trade_data(
         master_artists=master_artists
         )
     # Only plot bot selection if there's multiple bots to select
+    # Usually this is only available when there aren't many items to trade
+    # Well, hopefully at least
     if len(bots) > 1:
         _bot_selection_gui.plots_shown = symbols[:2]  # type: ignore
         bc_, price_cursor, quantity_cursor, master_cursor = _bot_selection_gui(
