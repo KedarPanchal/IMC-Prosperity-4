@@ -358,7 +358,9 @@ def _bot_selection_gui(
         axes[1, 1].clear()
 
         price_artists.clear()
+        price_artists_data_raw.clear()
         quantity_artists.clear()
+        quantity_artists_data_raw.clear()
         master_artists.clear()
 
         # Re-plot the data
